@@ -9,6 +9,7 @@ interface RecentFileCardProps {
   fileSize: string
   uploadDate: string
   score: number
+  fileUrl?: string
 }
 
 export function RecentFileCard({ fileName, fileSize, uploadDate, score }: RecentFileCardProps) {
