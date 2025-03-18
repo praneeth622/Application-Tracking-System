@@ -29,7 +29,7 @@ export async function analyzeResume(file: File, userId: string, userEmail: strin
     - Project experience
     - Profile summary
 
-    Please provide the analysis in JSON format.`;
+    Return only valid JSON without any markdown formatting or code block syntax.`;
 
     const result = await model.generateContent({
       contents: [
@@ -44,8 +44,22 @@ export async function analyzeResume(file: File, userId: string, userEmail: strin
     });
 
     const response = await result.response;
-    console.log(response.text());
-    const analysisJson = JSON.parse(response.text());
+    const responseText = await response.text();
+    console.log("AI Model Response:", responseText);
+
+    // Clean the response text by removing markdown code block syntax
+    const cleanResponse = responseText
+      .replace(/```json\n?/, '')  // Remove opening code block
+      .replace(/```\n?$/, '')     // Remove closing code block
+      .trim();                    // Remove extra whitespace
+
+    let analysisJson;
+    try {
+      analysisJson = JSON.parse(cleanResponse);
+    } catch (parseError) {
+      console.error("Error parsing JSON response:", parseError);
+      throw new Error("Invalid JSON response from AI model");
+    }
 
     // Save to Firebase
     const savedData = await saveResumeToFirebase(file, analysisJson, userId, userEmail);

@@ -10,6 +10,7 @@ import { useMobile } from "@/hooks/use-mobile"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/context/auth-context"
 import { UserDropdown } from "@/components/user-dropdown"
+import Link from "next/link"
 
 export default function UploadResumePage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -84,9 +85,12 @@ export default function UploadResumePage() {
                 <div className="mt-8">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xl font-semibold">Recent Uploads</h3>
-                    <button className="text-sm text-primary flex items-center hover:underline">
+                    <Link 
+                      href="/upload-resume/all-resumes" 
+                      className="text-sm text-primary flex items-center hover:underline"
+                    >
                       View all <ChevronRight className="w-4 h-4 ml-1" />
-                    </button>
+                    </Link>
                   </div>
 
                   <div className="space-y-4">
