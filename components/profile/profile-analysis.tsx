@@ -16,6 +16,7 @@ const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!)
 interface Profile {
   aiAnalysis?: string;
   analysis?: any;
+  filename?: string;
 }
 
 interface AnalysisSection {
@@ -82,6 +83,9 @@ const generateAnalysis = async () => {
         const text = response.text();
 
         // Update the profile with analysis
+        if (!user) {
+            throw new Error("User not authenticated");
+        }
         const userDocRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(userDocRef);
         

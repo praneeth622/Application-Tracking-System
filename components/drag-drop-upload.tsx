@@ -10,6 +10,46 @@ import { generateUUID } from "@/utils/generate-id"
 import { useToast } from "@/hooks/use-toast"
 import { analyzeResume } from "@/utils/analyze-resume"
 
+// Add this type definition at the top of the file
+type AnalysisResult = {
+  name: string;
+  phone_number: string;
+  email: string;
+  social_profile_links: {
+    linkedin?: string;
+    github?: string;
+  };
+  education: Array<{
+    institution: string;
+    degree: string;
+    major: string;
+    location: string;
+    dates: string;
+  }>;
+  work_experience: Array<{
+    company: string;
+    title: string;
+    location: string;
+    dates: string;
+    responsibilities: string[];
+  }>;
+  key_skills: {
+    languages: string[];
+    frameworks_and_libraries: string[];
+    databases_and_orm: string[];
+    developer_tools: string[];
+    cloud_and_services: string[];
+    coursework: string[];
+  };
+  project_experience: Array<{
+    name: string;
+    technologies: string[];
+    link: string;
+    description: string[];
+  }>;
+  profile_summary: string | null;
+};
+
 export function DragDropUpload() {
   const [isDragging, setIsDragging] = useState(false)
   const [file, setFile] = useState<File | null>(null)
@@ -21,7 +61,7 @@ export function DragDropUpload() {
   const { toast } = useToast()
 
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -94,13 +134,10 @@ export function DragDropUpload() {
 
       uploadTask.on('state_changed',
         (snapshot) => {
-          // Handle progress
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
           setUploadProgress(progress)
-          console.log('Upload is ' + progress + '% done')
         },
         (error) => {
-          // Handle error
           console.error('Upload error:', error)
           setUploadStatus("error")
           toast({
@@ -110,7 +147,6 @@ export function DragDropUpload() {
           })
         },
         async () => {
-          // Handle success
           try {
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref)
             setFileUrl(downloadURL)
@@ -122,22 +158,23 @@ export function DragDropUpload() {
 
             // Start resume analysis
             setIsAnalyzing(true)
-            const analysis = await analyzeResume(file)
-            setAnalysisResult(analysis)
-            console.log('Analysis:', analysis)
+            const result = await analyzeResume(file, user?.uid || '', user?.email || '')
+            
+            // Show success message
             toast({
               title: "Analysis complete",
-              description: "Your resume has been analyzed successfully",
-              icon: <CheckCircle className="w-4 h-4 text-green-500" />
+              description: "Your resume has been analyzed successfully"
             })
+
+            // Reset the component state after successful analysis
+            resetUpload()
           } catch (error: any) {
             console.error('Error:', error)
             setAnalysisError(error.message)
             toast({
               title: "Analysis failed",
               description: "There was an error analyzing your resume",
-              variant: "destructive",
-              icon: <AlertCircle className="w-4 h-4" />
+              variant: "destructive"
             })
           } finally {
             setIsAnalyzing(false)
@@ -157,7 +194,7 @@ export function DragDropUpload() {
 
   const handleFileAnalysis = async (file: File) => {
     try {
-      const result = await analyzeResume(file, user?.uid, user.email);
+      const result = await analyzeResume(file, user?.uid || '', user?.email || '');
       // Handle the response
       console.log('Analysis saved:', result);
     } catch (error) {
@@ -170,6 +207,9 @@ export function DragDropUpload() {
     setUploadProgress(0)
     setUploadStatus("idle")
     setFileUrl(null)
+    setAnalysisResult(null)
+    setAnalysisError(null)
+    setIsAnalyzing(false)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -240,6 +280,69 @@ export function DragDropUpload() {
             transition={{ duration: 0.3 }}
             className="glass-card"
           >
+            {analysisResult && (
+              <div className="p-6 space-y-4">
+                <h2 className="text-2xl font-bold">{analysisResult.name}</h2>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Contact Information</h3>
+                    <p>Phone: {analysisResult.phone_number}</p>
+                    <p>Email: {analysisResult.email}</p>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-lg font-semibold">Skills</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {analysisResult.key_skills.languages.map((skill, index) => (
+                        <span key={index} className="px-2 py-1 bg-primary/10 rounded-full text-sm">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold">Work Experience</h3>
+                  {analysisResult.work_experience.map((exp, index) => (
+                    <div key={index} className="mt-2">
+                      <h4 className="font-medium">{exp.company} - {exp.title}</h4>
+                      <p className="text-sm text-muted-foreground">{exp.dates}</p>
+                      <ul className="list-disc list-inside mt-1">
+                        {exp.responsibilities.map((resp, idx) => (
+                          <li key={idx} className="text-sm">{resp}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold">Education</h3>
+                  {analysisResult.education.map((edu, index) => (
+                    <div key={index} className="mt-2">
+                      <h4 className="font-medium">{edu.institution}</h4>
+                      <p className="text-sm">{edu.degree} in {edu.major}</p>
+                      <p className="text-sm text-muted-foreground">{edu.dates}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {isAnalyzing && (
+              <div className="p-6 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <span className="ml-3">Analyzing resume...</span>
+              </div>
+            )}
+
+            {analysisError && (
+              <div className="p-6 text-destructive">
+                <p>Error analyzing resume: {analysisError}</p>
+              </div>
+            )}
             <div className="py-6 px-4">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center">
@@ -365,7 +468,7 @@ export function DragDropUpload() {
                   ) : analysisResult ? (
                     <div className="bg-muted/50 rounded-lg p-4">
                       <h4 className="font-medium mb-2">Analysis Results</h4>
-                      <pre className="text-sm whitespace-pre-wrap">{analysisResult}</pre>
+                      <pre className="text-sm whitespace-pre-wrap">{JSON.stringify(analysisResult, null, 2)}</pre>
                     </div>
                   ) : analysisError ? (
                     <div className="bg-destructive/10 text-destructive rounded-lg p-4">
