@@ -44,40 +44,27 @@ export default function KeywordMatcherPage() {
         if (userDoc.exists()) {
           const userData = userDoc.data();
           if (userData.resumes && Array.isArray(userData.resumes)) {
-            // First, collect all resumes
             fetchedResumes.push(...userData.resumes);
             
-            // Then, process each resume for keywords
+            // Process each resume to extract skills
             userData.resumes.forEach((resume: Resume) => {
-              if (resume.analysis?.key_skills) {
-                // Extract all skills from key_skills object
-                const skills = resume.analysis.key_skills;
-                
-                // Process each category in key_skills
-                for (const category in skills) {
-                  const categorySkills = skills[category];
-                  if (Array.isArray(categorySkills)) {
-                    categorySkills.forEach(skill => {
-                      if (typeof skill === 'string' && skill.trim()) {
-                        // Add normalized skill to keywords set
-                        allKeywords.add(skill.toLowerCase().trim());
-                      }
-                    });
+              if (resume?.analysis?.key_skills && Array.isArray(resume.analysis.key_skills)) {
+                // Extract skills directly from the array
+                resume.analysis.key_skills.forEach(skill => {
+                  if (typeof skill === 'string' && skill.trim()) {
+                    // Add normalized skill to keywords set
+                    allKeywords.add(skill.toLowerCase().trim());
                   }
-                }
+                });
               }
             });
           }
         }
 
-        // Log for debugging
-        console.log('Total resumes found:', fetchedResumes.length);
-        console.log('Total unique keywords found:', allKeywords.size);
-        console.log('Keywords:', Array.from(allKeywords));
-
         // Update state with found data
         setKeywords(allKeywords);
         setResumes(fetchedResumes);
+        
       } catch (error) {
         console.error("Error fetching resumes:", error);
       }
@@ -90,20 +77,13 @@ export default function KeywordMatcherPage() {
   const filteredResumes = resumes.filter(resume => {
     if (selectedKeywords.length === 0) return true;
 
-    if (!resume.analysis?.key_skills) return false;
+    if (!resume?.analysis?.key_skills || !Array.isArray(resume.analysis.key_skills)) return false;
 
-    const resumeSkills = new Set<string>();
-    
-    // Collect all skills from the resume
-    Object.values(resume.analysis.key_skills).forEach(categorySkills => {
-      if (Array.isArray(categorySkills)) {
-        categorySkills.forEach(skill => {
-          if (typeof skill === 'string' && skill.trim()) {
-            resumeSkills.add(skill.toLowerCase().trim());
-          }
-        });
-      }
-    });
+    const resumeSkills = new Set(
+      resume.analysis.key_skills
+        .filter(skill => typeof skill === 'string')
+        .map(skill => skill.toLowerCase().trim())
+    );
 
     // Check if all selected keywords are present in the resume's skills
     return selectedKeywords.every(keyword => 

@@ -25,11 +25,11 @@ export async function analyzeResume(file: File, userId: string, userEmail: strin
     - Social profile links
     - Education details
     - Work experience details
-    - Key skills
+    - Key skills (Return as a single flat array without subcategories)
     - Project experience
-    - Profile summary
+    - Profile summary (Concise and relevant summary of the candidate’s expertise and background)
 
-    Return only valid JSON without any markdown formatting or code block syntax.`;
+    Ensure the output is in valid JSON format with no additional formatting, markdown, or code block syntax. The JSON should be well-structured, accurate, and free from unnecessary nesting or subsections beyond what is specified.`;
 
     const result = await model.generateContent({
       contents: [
