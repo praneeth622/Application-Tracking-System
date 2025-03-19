@@ -93,21 +93,7 @@ export default function UploadResumePage() {
                     </Link>
                   </div>
 
-                  <div className="space-y-4">
-                    <RecentFileCard
-                      fileName="resume-john-doe-2023.pdf"
-                      fileSize="1.2 MB"
-                      uploadDate="Today at 2:30 PM"
-                      score={85}
-                    />
-
-                    <RecentFileCard
-                      fileName="john-doe-software-engineer.pdf"
-                      fileSize="0.9 MB"
-                      uploadDate="Yesterday"
-                      score={72}
-                    />
-                  </div>
+                  
                 </div>
               </div>
 

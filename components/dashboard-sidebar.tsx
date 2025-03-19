@@ -61,8 +61,6 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
     { id: "upload", label: "Analyze Resume", icon: <FileText className="w-5 h-5" />, href: "/upload-resume" },
     { id: "profiles", label: "My Profiles", icon: <User className="w-5 h-5" />, href: "/profiles" },
     { id: "keywords", label: "Keyword Matcher", icon: <Search className="w-5 h-5" />, href: "/keyword-matcher" },
-    { id: "applications", label: "Job Applications", icon: <Briefcase className="w-5 h-5" />, href: "/applications" },
-    { id: "analytics", label: "Analytics", icon: <BarChart2 className="w-5 h-5" />, href: "/analytics" },
   ]
 
   const secondaryNavItems = [

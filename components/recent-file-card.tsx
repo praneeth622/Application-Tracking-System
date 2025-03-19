@@ -44,14 +44,14 @@ export function RecentFileCard({ fileName, fileSize, uploadDate, score }: Recent
         <div className="flex items-center">
           <div className="mr-4">
             <div className="flex items-center">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-2">
+              {/* <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-2">
                 <span className="text-xs font-semibold">{score}</span>
-              </div>
+              </div> */}
               <div className="text-xs">
-                <div className="font-medium">ATS Score</div>
-                <div className={`${score >= 80 ? "text-green-500" : score >= 60 ? "text-amber-500" : "text-red-500"}`}>
+                {/* <div className="font-medium">ATS Score</div> */}
+                {/* <div className={`${score >= 80 ? "text-green-500" : score >= 60 ? "text-amber-500" : "text-red-500"}`}>
                   {score >= 80 ? "Excellent" : score >= 60 ? "Good" : "Needs Work"}
-                </div>
+                </div> */}
               </div>
             </div>
           </div>
