@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/use-toast'
 import { GoogleGenerativeAI } from "@google/generative-ai"
@@ -15,7 +15,14 @@ const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!)
 
 interface Profile {
   aiAnalysis?: string;
-  analysis?: any;
+  summary?: {
+    keyStrengths: string[];
+    experience: string[];
+    technicalSkills: string[];
+    potentialRoles: string[];
+    areasForImprovement: string[];
+    achievements: string[];
+  };
   filename?: string;
 }
 
@@ -25,103 +32,123 @@ interface AnalysisSection {
   content: string[];
 }
 
-
+// Function to fetch profile summary from Firestore
+async function fetchProfileSummary(): Promise<Profile> {
+  try {
+    const profileRef = doc(db, 'profileSummary', 'analysis')
+    const profileDoc = await getDoc(profileRef)
+    
+    if (profileDoc.exists()) {
+      return {
+        summary: {
+          keyStrengths: profileDoc.data()?.keyStrengths || [],
+          experience: profileDoc.data()?.experience || [],
+          technicalSkills: profileDoc.data()?.technicalSkills || [],
+          potentialRoles: profileDoc.data()?.potentialRoles || [],
+          areasForImprovement: profileDoc.data()?.areasForImprovement || [],
+          achievements: profileDoc.data()?.achievements || []
+        }
+      }
+    }
+    
+    return {
+      summary: {
+        keyStrengths: [],
+        experience: [],
+        technicalSkills: [],
+        potentialRoles: [],
+        areasForImprovement: [],
+        achievements: []
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching profile summary:', error)
+    return {
+      summary: {
+        keyStrengths: [],
+        experience: [],
+        technicalSkills: [],
+        potentialRoles: [],
+        areasForImprovement: [],
+        achievements: []
+      }
+    }
+  }
+}
 
 export function ProfileAnalysis({ profile }: { profile: Profile }) {
   const { user } = useAuth()
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [profileSummary, setProfileSummary] = useState<Profile>(profile)
 
-const generateAnalysis = async () => {
+  // Fetch profile summary on component mount
+  useEffect(() => {
+    fetchProfileSummary().then(summary => {
+      setProfileSummary(summary)
+    })
+  }, [])
+
+  const generateAnalysis = async () => {
     try {
-        setIsAnalyzing(true)
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-pro", // Using the correct model name
-            generationConfig: {
-                temperature: 0.7,
-                topP: 1,
-                topK: 1,
-                maxOutputTokens: 2048,
-            },
-        });
+      setIsAnalyzing(true)
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-pro",
+        generationConfig: {
+          temperature: 0.7,
+          topP: 1,
+          topK: 1,
+          maxOutputTokens: 2048,
+        },
+      });
 
-        const prompt = `As an IT recruitment specialist, analyze this candidate's profile and provide a detailed assessment in the following format:
+      const prompt = `As an IT recruitment specialist, analyze this candidate's profile and provide a detailed assessment in the following format:
+        ${JSON.stringify(profileSummary.summary)}`;
 
-        1. Key Strengths
-        • List key professional strengths
-        • Focus on standout qualities
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
+      
+      const response = await result.response;
+      const text = response.text();
 
-        2. Experience & Suitability
-        • Evaluate years of experience
-        • Assess industry relevance
-        • Comment on career progression
-
-        3. Technical Skills
-        • Evaluate technical expertise
-        • Highlight specialized skills
-        • Note technology proficiency levels
-
-        4. Potential Roles
-        • Suggest suitable positions
-        • List ideal work environments
-
-        5. Areas for Improvement
-        • Identify skill gaps
-        • Suggest development areas
-
-        6. Achievements
-        • List notable accomplishments
-        • Highlight impactful projects
-
-        Analyze the following profile data and provide insights in clear bullet points:
-        ${JSON.stringify(profile.analysis)}`;
-
-        const result = await model.generateContent({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-        });
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+      const userDocRef = doc(db, "users", user.uid, "resumes");
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const updatedResumes = userData.resumes.map((resume: any) => 
+          resume.filename === profile.filename 
+            ? { ...resume, aiAnalysis: text }
+            : resume
+        );
         
-        const response = await result.response;
-        const text = response.text();
+        await updateDoc(userDocRef, { resumes: updatedResumes });
+      }
 
-        // Update the profile with analysis
-        if (!user) {
-            throw new Error("User not authenticated");
-        }
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (userDoc.exists()) {
-            const userData = userDoc.data();
-            const updatedResumes = userData.resumes.map((resume: any) => 
-                resume.filename === profile.filename 
-                    ? { ...resume, aiAnalysis: text }
-                    : resume
-            );
-            
-            await updateDoc(userDocRef, { resumes: updatedResumes });
-        }
+      toast({
+        title: "Analysis Complete",
+        description: "Profile analysis has been generated and saved.",
+      });
 
-        toast({
-            title: "Analysis Complete",
-            description: "Profile analysis has been generated and saved.",
-        });
-
-        return { ...profile, aiAnalysis: text };
+      return { ...profile, aiAnalysis: text };
     } catch (error) {
-        console.error('Error generating analysis:', error);
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to generate analysis. Please try again.",
-        });
-        return profile;
+      console.error('Error generating analysis:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to generate analysis. Please try again.",
+      });
+      return profile;
     } finally {
-        setIsAnalyzing(false);
+      setIsAnalyzing(false);
     }
-}
+  }
 
   const parseAnalysis = (analysis: string): AnalysisSection[] => {
     try {
-      // Split the analysis into sections based on numbered points
       const sections = analysis.split(/\d+\.\s+/).filter(Boolean);
       
       return [
@@ -180,10 +207,7 @@ const generateAnalysis = async () => {
             className="relative"
           >
             {isAnalyzing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
-                Analyzing...
-              </>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
             ) : (
               <>Generate Analysis</>
             )}

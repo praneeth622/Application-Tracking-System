@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/use-toast'
+import { db } from '@/FirebaseConfig'
+import { arrayUnion } from 'firebase/firestore'
+import { useAuth } from '@/context/auth-context'
 
 interface Profile {
   companyFeedback?: string[]
@@ -11,6 +14,7 @@ interface Profile {
 
 export function CompanyFeedback({ profile }: { profile: Profile }) {
   const [newFeedback, setNewFeedback] = useState("")
+  const { user } = useAuth()
 
 const addFeedback = async () => {
     if (!profile || !newFeedback.trim()) return;
@@ -26,7 +30,7 @@ const addFeedback = async () => {
         };
 
         // Get user doc reference
-        const userDocRef = doc(db, "users", user.uid);
+        const userDocRef = doc(db, "users", user?.uid, "resumes", "data");
 
         // Update profiles array in Firestore
         await updateDoc(userDocRef, { 

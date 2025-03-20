@@ -31,7 +31,7 @@ export default function ProfilePage() {
       if (!user || !params.filename) return
 
       try {
-        const userDocRef = doc(db, "users", user.uid)
+        const userDocRef = doc(db, "users", user.uid, "resumes", "data");
         const userDoc = await getDoc(userDocRef)
 
         if (userDoc.exists()) {

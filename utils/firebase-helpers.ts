@@ -1,5 +1,5 @@
 import { db, storage } from "@/FirebaseConfig";
-import { doc, updateDoc, arrayUnion, getDoc, setDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc, setDoc, arrayUnion } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { v4 as uuidv4 } from "uuid";
 
@@ -39,22 +39,23 @@ export async function saveResumeToFirebase(
       uploadedAt: new Date(),
     };
 
-    // Get reference to user document
-    const userDocRef = doc(db, "users", userId);
+    // Get reference to user's resumes document
+    const userResumesRef = doc(db, "users", userId, "resumes", "data");
 
     try {
-      const userDoc = await getDoc(userDocRef);
+      // Check if document exists
+      const docSnap = await getDoc(userResumesRef);
 
-      if (!userDoc.exists()) {
-        // Create new user document if it doesn't exist
-        await setDoc(userDocRef, {
+      if (!docSnap.exists()) {
+        // Create new document if it doesn't exist
+        await setDoc(userResumesRef, {
           user_id: userId,
           user_emailid: userEmail,
           resumes: [resumeData]
         });
       } else {
-        // Update existing user document
-        await updateDoc(userDocRef, {
+        // Update existing document by adding new resume to array
+        await updateDoc(userResumesRef, {
           resumes: arrayUnion(resumeData)
         });
       }

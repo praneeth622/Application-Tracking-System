@@ -40,7 +40,7 @@ export default function ProfilesPage() {
       if (!user) return
 
       try {
-        const userDocRef = doc(db, "users", user.uid)
+        const userDocRef = doc(db, "users", user.uid, "resumes", "data");
         const userDoc = await getDoc(userDocRef)
 
         if (userDoc.exists()) {
@@ -64,6 +64,7 @@ export default function ProfilesPage() {
 
   // Generate AI analysis for a profile
   const generateAnalysis = async (profile: Profile) => {
+    
     try {
       setIsAnalyzing(true)
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" })
@@ -88,7 +89,7 @@ export default function ProfilesPage() {
         p.filename === profile.filename ? { ...p, aiAnalysis: analysis } : p
       )
 
-      const userDocRef = doc(db, "users", user!.uid)
+      const userDocRef = doc(db, "users", user?.uid, "resumes", "data");
       await updateDoc(userDocRef, { resumes: updatedProfiles })
 
       setProfiles(updatedProfiles)
@@ -127,7 +128,7 @@ export default function ProfilesPage() {
         p.filename === selectedProfile.filename ? updatedProfile : p
       )
 
-      const userDocRef = doc(db, "users", user!.uid)
+      const userDocRef = doc(db, "users", user.uid, "resumes", "data");
       await updateDoc(userDocRef, { resumes: updatedProfiles })
 
       setProfiles(updatedProfiles)

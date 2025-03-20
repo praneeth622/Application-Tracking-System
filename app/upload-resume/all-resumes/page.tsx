@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "@/context/auth-context"
 import { db } from "@/FirebaseConfig"
-import { doc, getDoc } from "firebase/firestore"
+import { collection, doc, getDoc, getDocs } from "firebase/firestore"
 import { motion } from "framer-motion"
 import { RecentFileCard } from "@/components/recent-file-card"
 import { FileText } from "lucide-react"
@@ -28,24 +28,27 @@ export default function AllResumesPage() {
 
   useEffect(() => {
     const fetchResumes = async () => {
-      if (!user) return
-
+      if (!user) return;
+    
       try {
-        const userDocRef = doc(db, "users", user.uid)
-        const userDoc = await getDoc(userDocRef)
-
-        if (userDoc.exists()) {
-          const userData = userDoc.data()
-          setResumes(userData.resumes || [])
-        }
+        const resumeCollectionRef = collection(db, "users", user.uid, "resumes"); // Subcollection reference
+        const querySnapshot = await getDocs(resumeCollectionRef); // Get all documents in the subcollection
+    
+        const resumes = querySnapshot.docs.map((doc) => ({
+          id: doc.id, 
+          ...doc.data()
+        }));
+    
+        setResumes(resumes); // Store the fetched resumes
       } catch (error) {
-        console.error("Error fetching resumes:", error)
+        console.error("Error fetching resumes:", error);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
-
-    fetchResumes()
+    };
+    
+    fetchResumes();
+    
   }, [user])
 
   const formatDate = (timestamp: { seconds: number; nanoseconds: number }) => {

@@ -35,7 +35,7 @@ export default function KeywordMatcherPage() {
       if (!user) return;
 
       try {
-        const userDocRef = doc(db, "users", user.uid);
+        const userDocRef = doc(db, "users", user.uid, "resumes", "data");
         const userDoc = await getDoc(userDocRef);
         
         const allKeywords = new Set<string>();
