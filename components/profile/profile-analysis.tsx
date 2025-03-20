@@ -15,6 +15,7 @@ const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!)
 
 interface Profile {
   aiAnalysis?: string;
+  profile_summary?: string;
   summary?: {
     keyStrengths: string[];
     experience: string[];
@@ -200,7 +201,7 @@ export function ProfileAnalysis({ profile }: { profile: Profile }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold">Analysis</h2>
-        {!profile.aiAnalysis && (
+        {!profile.aiAnalysis && !profile.profile_summary && (
           <Button 
             onClick={generateAnalysis}
             disabled={isAnalyzing}
@@ -235,10 +236,15 @@ export function ProfileAnalysis({ profile }: { profile: Profile }) {
             </Card>
           ))}
         </div>
+      ) : profile.profile_summary ? (
+        <div className="rounded-lg border p-4">
+          <h3 className="text-lg font-medium mb-3">Profile Summary</h3>
+          <p className="text-sm text-muted-foreground">{profile.profile_summary}</p>
+        </div>
       ) : (
         <div className="flex items-center justify-center h-40 rounded-lg border-2 border-dashed">
           <div className="text-center px-4">
-            <p className="text-muted-foreground mb-2">No analysis generated yet</p>
+            <p className="text-muted-foreground mb-2">Analysis is not available</p>
             <p className="text-xs text-muted-foreground">Click the button above to analyze this profile</p>
           </div>
         </div>
