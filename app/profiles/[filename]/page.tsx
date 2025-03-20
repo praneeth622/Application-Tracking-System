@@ -17,6 +17,14 @@ import { CompanyFeedback } from '@/components/profile/company-feedback'
 
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!)
 
+interface Profile {
+  filename: string;
+  uploadedAt: any;
+  aiAnalysis?: string;
+  profile_summary?: string;
+  // ... other fields
+}
+
 export default function ProfilePage() {
   const params = useParams()
   const router = useRouter()
@@ -28,33 +36,44 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      if (!user || !params.filename) return
+      if (!user || !params.filename) return;
 
       try {
         const userDocRef = doc(db, "users", user.uid, "resumes", "data");
-        const userDoc = await getDoc(userDocRef)
+        const userDoc = await getDoc(userDocRef);
 
         if (userDoc.exists()) {
-          const userData = userDoc.data()
+          const userData = userDoc.data();
           const foundProfile = userData.resumes?.find(
             (r: any) => r.filename === decodeURIComponent(params.filename as string)
-          )
+          );
           
           if (foundProfile) {
-            setProfile(foundProfile)
+            // Transform the data to include both aiAnalysis and profile_summary
+            const profileData: Profile = {
+              ...foundProfile,
+              profile_summary: foundProfile.analysis?.profile_summary || null,
+            };
+            setProfile(profileData);
+          } else {
+            toast({
+              title: "Profile not found",
+              description: "The requested profile could not be found",
+              variant: "destructive",
+            });
           }
         }
       } catch (error) {
-        console.error("Error fetching profile:", error)
+        console.error("Error fetching profile:", error);
         toast({
           title: "Error",
           description: "Failed to fetch profile",
           variant: "destructive",
-        })
+        });
       }
-    }
+    };
 
-    fetchProfile()
+    fetchProfile();
   }, [user, params.filename])
 
   return (
@@ -118,7 +137,7 @@ export default function ProfilePage() {
 
               {/* Feedback Section */}
               <div className="rounded-lg border bg-card p-6 shadow-sm">
-                <CompanyFeedback profile={profile} />
+                <CompanyFeedback filename={profile.filename} filelink={profile.filelink} />
               </div>
             </div>
           ) : (
