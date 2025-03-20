@@ -27,7 +27,7 @@ export async function analyzeResume(file: File, userId: string, userEmail: strin
     - Work experience details
     - Key skills (Return as a single flat array without subcategories)
     - Project experience
-    - Profile summary (Concise and relevant summary of the candidate’s expertise and background)
+    - Profile summary (Give a brief analysis of the candidate's profile)
 
     Ensure the output is in valid JSON format with no additional formatting, markdown, or code block syntax. The JSON should be well-structured, accurate, and free from unnecessary nesting or subsections beyond what is specified.`;
 
