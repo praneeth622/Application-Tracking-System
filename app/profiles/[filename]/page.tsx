@@ -19,10 +19,10 @@ const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!)
 
 interface Profile {
   filename: string;
+  filelink: string;
   uploadedAt: any;
   aiAnalysis?: string;
   profile_summary?: string;
-  // ... other fields
 }
 
 export default function ProfilePage() {
