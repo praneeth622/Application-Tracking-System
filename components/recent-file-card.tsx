@@ -2,18 +2,31 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { FileText, MoreHorizontal, Download, Eye, Trash2, Clock } from "lucide-react"
+import { FileText, MoreHorizontal, Download, Eye, Trash2, Clock, ExternalLink } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface RecentFileCardProps {
   fileName: string
   fileSize: string
   uploadDate: string
   score: number
-  fileUrl?: string
+  fileUrl: string
 }
 
-export function RecentFileCard({ fileName, fileSize, uploadDate, score }: RecentFileCardProps) {
+export function RecentFileCard({
+  fileName,
+  fileSize,
+  uploadDate,
+  score,
+  fileUrl
+}: RecentFileCardProps) {
   const [showActions, setShowActions] = useState(false)
+
+  const handleViewFile = () => {
+    if (fileUrl) {
+      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
     <motion.div
@@ -44,14 +57,7 @@ export function RecentFileCard({ fileName, fileSize, uploadDate, score }: Recent
         <div className="flex items-center">
           <div className="mr-4">
             <div className="flex items-center">
-              {/* <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-2">
-                <span className="text-xs font-semibold">{score}</span>
-              </div> */}
               <div className="text-xs">
-                {/* <div className="font-medium">ATS Score</div> */}
-                {/* <div className={`${score >= 80 ? "text-green-500" : score >= 60 ? "text-amber-500" : "text-red-500"}`}>
-                  {score >= 80 ? "Excellent" : score >= 60 ? "Good" : "Needs Work"}
-                </div> */}
               </div>
             </div>
           </div>
@@ -78,9 +84,10 @@ export function RecentFileCard({ fileName, fileSize, uploadDate, score }: Recent
                   <motion.button
                     className="w-full text-left px-3 py-1.5 hover:bg-muted transition-colors flex items-center text-sm"
                     whileHover={{ x: 2 }}
+                    onClick={handleViewFile}
                   >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Analysis
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    View File
                   </motion.button>
                   <motion.button
                     className="w-full text-left px-3 py-1.5 hover:bg-muted transition-colors flex items-center text-sm"

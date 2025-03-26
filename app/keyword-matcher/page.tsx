@@ -7,18 +7,38 @@ import { useAuth } from "@/context/auth-context"
 import { RecentFileCard } from "@/components/recent-file-card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, Tag } from "lucide-react"
+import { Search, Tag, X } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { motion } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Button } from "@/components/ui/button"
 
+// First, let's update the Resume interface to match the JSON structure
 interface Resume {
-  filename: string
-  filelink: string
-  uploadedAt: any
+  filename: string;
+  filelink: string;
+  uploadedAt: any;
   analysis: {
-    key_skills: Record<string, string[]> // Dynamic skill categories
-  }
+    name: string;
+    education_details: Array<{
+      institute: string;
+      degree: string;
+      major: string;
+      location: string;
+      dates: string;
+    }>;
+    work_experience_details: Array<{
+      company: string;
+      title: string;
+      location: string;
+      dates: string;
+      responsibilities: string[];
+    }>;
+    key_skills: string[];
+    profile_summary: string;
+    experience_years?: number; // Add this to the interface
+  };
 }
 
 export default function KeywordMatcherPage() {
@@ -29,6 +49,14 @@ export default function KeywordMatcherPage() {
   const [resumes, setResumes] = useState<Resume[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const { user } = useAuth()
+  const [educationFilters, setEducationFilters] = useState<Set<string>>(new Set())
+  const [selectedEducation, setSelectedEducation] = useState<string[]>([])
+  const [locations, setLocations] = useState<Set<string>>(new Set())
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([])
+  const [experienceRanges] = useState([
+    '0-2 years', '2-5 years', '5-8 years', '8+ years'
+  ])
+  const [selectedExperience, setSelectedExperience] = useState<string[]>([])
 
   useEffect(() => {
     const fetchResumes = async () => {
@@ -46,16 +74,52 @@ export default function KeywordMatcherPage() {
           if (userData.resumes && Array.isArray(userData.resumes)) {
             fetchedResumes.push(...userData.resumes);
             
-            // Process each resume to extract skills
             userData.resumes.forEach((resume: Resume) => {
+              // Process key skills
               if (resume?.analysis?.key_skills && Array.isArray(resume.analysis.key_skills)) {
-                // Extract skills directly from the array
                 resume.analysis.key_skills.forEach(skill => {
                   if (typeof skill === 'string' && skill.trim()) {
-                    // Add normalized skill to keywords set
                     allKeywords.add(skill.toLowerCase().trim());
                   }
                 });
+              }
+            
+              // Process education
+              if (resume?.analysis?.education_details) {
+                resume.analysis.education_details.forEach(edu => {
+                  // Add degree information
+                  if (edu.degree) {
+                    educationFilters.add(edu.degree.toLowerCase().trim());
+                  }
+                  // Add major information
+                  if (edu.major) {
+                    educationFilters.add(edu.major.toLowerCase().trim());
+                  }
+                });
+              }
+            
+              // Process location from education details instead of work experience
+              if (resume?.analysis?.education_details) {
+                resume.analysis.education_details.forEach(edu => {
+                  if (edu.location) {
+                    locations.add(edu.location.toLowerCase().trim());
+                  }
+                });
+              }
+            
+              // Process experience years (calculated from work experience dates)
+              if (resume?.analysis?.work_experience_details) {
+                let totalExperience = 0;
+                resume.analysis.work_experience_details.forEach(exp => {
+                  if (exp.dates) {
+                    const [startDate, endDate] = exp.dates.split('–').map(d => d.trim());
+                    const end = endDate === 'Present' ? new Date() : new Date(endDate);
+                    const start = new Date(startDate);
+                    const years = (end.getFullYear() - start.getFullYear());
+                    totalExperience += years;
+                  }
+                });
+                resume.analysis.experience_years = totalExperience; // Add this to the resume object
               }
             });
           }
@@ -64,6 +128,8 @@ export default function KeywordMatcherPage() {
         // Update state with found data
         setKeywords(allKeywords);
         setResumes(fetchedResumes);
+        setEducationFilters(educationFilters);
+        setLocations(locations);
         
       } catch (error) {
         console.error("Error fetching resumes:", error);
@@ -75,22 +141,46 @@ export default function KeywordMatcherPage() {
 
   // Update the filter function to match keywords more accurately
   const filteredResumes = resumes.filter(resume => {
-    if (selectedKeywords.length === 0) return true;
-
-    if (!resume?.analysis?.key_skills || !Array.isArray(resume.analysis.key_skills)) return false;
-
-    const resumeSkills = new Set(
-      resume.analysis.key_skills
-        .filter(skill => typeof skill === 'string')
-        .map(skill => skill.toLowerCase().trim())
-    );
-
-    // Check if all selected keywords are present in the resume's skills
-    return selectedKeywords.every(keyword => 
-      Array.from(resumeSkills).some(skill => 
-        skill.includes(keyword.toLowerCase())
+    if (selectedKeywords.length === 0 && 
+        selectedEducation.length === 0 && 
+        selectedLocations.length === 0 && 
+        selectedExperience.length === 0) return true;
+  
+    // Match skills
+    const matchesSkills = selectedKeywords.length === 0 || selectedKeywords.every(keyword =>
+      resume.analysis.key_skills.some(skill => 
+        skill.toLowerCase().includes(keyword.toLowerCase())
       )
     );
+  
+    // Match education (check both degree and major)
+    const matchesEducation = selectedEducation.length === 0 || selectedEducation.some(edu =>
+      resume.analysis.education_details.some(eduDetail => 
+        eduDetail.degree.toLowerCase().includes(edu.toLowerCase()) ||
+        eduDetail.major.toLowerCase().includes(edu.toLowerCase())
+      )
+    );
+  
+    // Match location from education details
+    const matchesLocation = selectedLocations.length === 0 || 
+      resume.analysis.education_details.some(edu =>
+        selectedLocations.includes(edu.location.toLowerCase())
+      );
+  
+    // Match experience range
+    const matchesExperience = selectedExperience.length === 0 || 
+      selectedExperience.some(range => {
+        const years = resume.analysis.experience_years;
+        switch(range) {
+          case '0-2 years': return (years ?? 0) >= 0 && (years ?? 0) <= 2;
+          case '2-5 years': return (years ?? 0) > 2 && (years ?? 0) <= 5;
+          case '5-8 years': return (years ?? 0) > 5 && (years ?? 0) <= 8;
+          case '8+ years': return (years ?? 0) > 8;
+          default: return false;
+        }
+      });
+  
+    return matchesSkills && matchesEducation && matchesLocation && matchesExperience;
   });
 
   // Add debugging log for filtered resumes
@@ -147,18 +237,91 @@ export default function KeywordMatcherPage() {
                 </div>
 
                 {/* Keywords list */}
-                <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                <div className="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
                   {filteredKeywords.map(keyword => (
-                    <Badge
-                      key={keyword}
-                      variant={selectedKeywords.includes(keyword) ? "default" : "outline"}
-                      className="mr-2 mb-2 cursor-pointer"
-                      onClick={() => toggleKeyword(keyword)}
-                    >
-                      <Tag className="w-3 h-3 mr-1" />
-                      {keyword}
-                    </Badge>
+                    <div key={keyword} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`skill-${keyword}`}
+                        checked={selectedKeywords.includes(keyword)}
+                        onCheckedChange={() => toggleKeyword(keyword)}
+                      />
+                      <label
+                        htmlFor={`skill-${keyword}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        {keyword}
+                      </label>
+                    </div>
                   ))}
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-3">Education</h3>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                    {Array.from(educationFilters).map(edu => (
+                      <div key={edu} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`education-${edu}`}
+                          checked={selectedEducation.includes(edu)}
+                          onCheckedChange={() => setSelectedEducation(prev => 
+                            prev.includes(edu) ? prev.filter(e => e !== edu) : [...prev, edu]
+                          )}
+                        />
+                        <label
+                          htmlFor={`education-${edu}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {edu}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-3">Location</h3>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                    {Array.from(locations).map(location => (
+                      <div key={location} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`location-${location}`}
+                          checked={selectedLocations.includes(location)}
+                          onCheckedChange={() => setSelectedLocations(prev => 
+                            prev.includes(location) ? prev.filter(l => l !== location) : [...prev, location]
+                          )}
+                        />
+                        <label
+                          htmlFor={`location-${location}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {location}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-3">Experience</h3>
+                  <div className="space-y-2">
+                    {experienceRanges.map(range => (
+                      <div key={range} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`experience-${range}`}
+                          checked={selectedExperience.includes(range)}
+                          onCheckedChange={() => setSelectedExperience(prev => 
+                            prev.includes(range) ? prev.filter(e => e !== range) : [...prev, range]
+                          )}
+                        />
+                        <label
+                          htmlFor={`experience-${range}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {range}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -183,7 +346,7 @@ export default function KeywordMatcherPage() {
 
                 {filteredResumes.length === 0 && (
                   <div className="text-center py-12 text-muted-foreground">
-                    No resumes match the selected keywords
+                    No resumes match the selected filters
                   </div>
                 )}
               </div>
