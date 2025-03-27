@@ -18,6 +18,28 @@ import {
 } from "@/components/ui/select"
 import { useRouter } from 'next/navigation'
 import { toast } from '@/components/ui/use-toast'
+import { addDoc, collection, Timestamp } from 'firebase/firestore'
+import { db } from '@/FirebaseConfig' // Adjust the path to your Firebase configuration file
+import { v4 as uuidv4 } from 'uuid'
+import { SkillInput } from "@/components/skill-input"
+
+interface JobFormData {
+  title: string
+  company: string
+  location: string
+  employment_type: string
+  experience_required: string
+  salary_range: string
+  description: string
+  requirements: string[]
+  benefits: string[]
+  working_hours: string
+  mode_of_work: string
+  key_responsibilities: string[]
+  nice_to_have_skills: string[]
+  about_company: string
+  deadline: string
+}
 
 export default function CreateJobPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -25,25 +47,74 @@ export default function CreateJobPage() {
   const { user } = useAuth()
   const router = useRouter()
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<JobFormData>({
     title: '',
     company: '',
     location: '',
-    employmentType: '',
-    experience: '',
-    salary: '',
+    employment_type: '',
+    experience_required: '',
+    salary_range: '',
     description: '',
-    requirements: '',
-    benefits: '',
+    requirements: [],
+    benefits: [],
+    working_hours: '',
+    mode_of_work: '',
+    key_responsibilities: [],
+    nice_to_have_skills: [],
+    about_company: '',
+    deadline: '',
   })
+
+  const [skills, setSkills] = useState<string[]>([])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
+    
     try {
-      // Here you would typically make an API call to save the job
-      // For now, we'll just show a success message
-      console.log('Job Data:', formData)
+      if (!user) throw new Error('User not authenticated')
+
+      // Convert text areas with multiple lines to arrays
+      const requirementsArray = formData.requirements.toString().split('\n').filter(Boolean)
+      const benefitsArray = formData.benefits.toString().split('\n').filter(Boolean)
+      const responsibilitiesArray = formData.key_responsibilities.toString().split('\n').filter(Boolean)
+      const niceToHaveArray = formData.nice_to_have_skills.toString().split('\n').filter(Boolean)
+
+      const jobData = {
+        job_id: `job_${uuidv4()}`,
+        title: formData.title,
+        company: formData.company,
+        location: formData.location,
+        employment_type: formData.employment_type,
+        experience_required: formData.experience_required,
+        salary_range: formData.salary_range,
+        description: formData.description,
+        status: 'active',
+        total_applications: 0,
+        shortlisted: 0,
+        rejected: 0,
+        in_progress: 0,
+        benefits: benefitsArray,
+        requirements: requirementsArray,
+        skills_required: skills,
+        working_hours: formData.working_hours,
+        mode_of_work: formData.mode_of_work,
+        key_responsibilities: responsibilitiesArray,
+        nice_to_have_skills: niceToHaveArray,
+        about_company: formData.about_company,
+        deadline: formData.deadline,
+        created_at: Timestamp.now(),
+        updated_at: Timestamp.now(),
+        hr_id: user.uid,
+        resumes: [],
+        metadata: {
+          created_by: user.email || '',
+          last_modified_by: user.email || ''
+        }
+      }
+
+      // Add the job to Firestore
+      const jobsRef = collection(db, 'jobs')
+      await addDoc(jobsRef, jobData)
 
       toast({
         title: "Success",
@@ -52,6 +123,7 @@ export default function CreateJobPage() {
 
       router.push('/job')
     } catch (error) {
+      console.error('Error creating job:', error)
       toast({
         title: "Error",
         description: "Failed to post job",
@@ -77,7 +149,7 @@ export default function CreateJobPage() {
           <Button
             variant="ghost"
             className="mb-6"
-            onClick={() => router.back()}
+            onClick={() => router.push('/job')}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Jobs
@@ -111,10 +183,20 @@ export default function CreateJobPage() {
               </div>
 
               <div>
+                <label className="text-sm font-medium">Location</label>
+                <Input
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  placeholder="e.g. New York, NY"
+                  required
+                />
+              </div>
+
+              <div>
                 <label className="text-sm font-medium">Employment Type</label>
                 <Select
-                  value={formData.employmentType}
-                  onValueChange={(value) => setFormData({ ...formData, employmentType: value })}
+                  value={formData.employment_type}
+                  onValueChange={(value) => setFormData({ ...formData, employment_type: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select employment type" />
@@ -131,19 +213,9 @@ export default function CreateJobPage() {
               <div>
                 <label className="text-sm font-medium">Minimum Experience</label>
                 <Input
-                  value={formData.experience}
-                  onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
+                  value={formData.experience_required}
+                  onChange={(e) => setFormData({ ...formData, experience_required: e.target.value })}
                   placeholder="e.g. 5+ years"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Location</label>
-                <Input
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="e.g. New York, NY"
                   required
                 />
               </div>
@@ -151,11 +223,38 @@ export default function CreateJobPage() {
               <div>
                 <label className="text-sm font-medium">Salary Range</label>
                 <Input
-                  value={formData.salary}
-                  onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                  value={formData.salary_range}
+                  onChange={(e) => setFormData({ ...formData, salary_range: e.target.value })}
                   placeholder="e.g. $120,000 - $150,000"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Working Hours</label>
+                <Input
+                  value={formData.working_hours}
+                  onChange={(e) => setFormData({ ...formData, working_hours: e.target.value })}
+                  placeholder="e.g. 40 hours/week"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Mode of Work</label>
+                <Select
+                  value={formData.mode_of_work}
+                  onValueChange={(value) => setFormData({ ...formData, mode_of_work: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select mode of work" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="remote">Remote</SelectItem>
+                    <SelectItem value="in-office">In-office</SelectItem>
+                    <SelectItem value="hybrid">Hybrid</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
@@ -170,27 +269,75 @@ export default function CreateJobPage() {
               </div>
 
               <div>
-                <label className="text-sm font-medium">Requirements</label>
+                <label className="text-sm font-medium">Key Responsibilities</label>
                 <Textarea
-                  value={formData.requirements}
-                  onChange={(e) => setFormData({ ...formData, requirements: e.target.value })}
-                  placeholder="Enter job requirements"
+                  value={formData.key_responsibilities}
+                  onChange={(e) => setFormData({ ...formData, key_responsibilities: e.target.value.split('\n') })}
+                  placeholder="Enter detailed Key Responsibilities"
                   className="h-32"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-sm font-medium">Benefits</label>
+                <label className="text-sm font-medium">Required Qualifications</label>
                 <Textarea
-                  value={formData.benefits}
-                  onChange={(e) => setFormData({ ...formData, benefits: e.target.value })}
-                  placeholder="Enter job benefits"
+                  value={formData.requirements.join('\n')}
+                  onChange={(e) => setFormData({ ...formData, requirements: e.target.value.split('\n') })}
+                  placeholder="Enter Required Skills & Qualifications"
+                  className="h-32"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Required Skills</label>
+                <SkillInput
+                  skills={skills}
+                  setSkills={setSkills}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Nice-to-Have Skills (Optional)</label>
+                <Textarea
+                  value={formData.nice_to_have_skills}
+                  onChange={(e) => setFormData({ ...formData, nice_to_have_skills: e.target.value.split('\n') })}
+                  placeholder="Enter Nice-to-Have Skills (Optional)"
+                  className="h-32"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">About the Company (Optional)</label>
+                <Textarea
+                  value={formData.about_company}
+                  onChange={(e) => setFormData({ ...formData, about_company: e.target.value })}
+                  placeholder="Enter About the Company (Optional)"
+                  className="h-32"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Benefits Offered</label>
+                <Textarea
+                  value={formData.benefits.join('\n')}
+                  onChange={(e) => setFormData({ ...formData, benefits: e.target.value.split('\n') })}
+                  placeholder="Enter Benefits Offered"
                   className="h-32"
                   required
                 />
               </div>
             </div>
+
+            <div>
+                <label className="text-sm font-medium">Application Deadline</label>
+                <Input
+                  value={formData.deadline}
+                  onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                  required
+                />
+              </div>
 
             <Button type="submit" className="w-full">
               Post Job
