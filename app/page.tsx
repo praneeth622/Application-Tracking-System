@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
 import { UserDropdown } from "@/components/user-dropdown";
+import { auth } from "@/FirebaseConfig";
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -212,6 +213,10 @@ export default function LandingPage() {
       },
     },
   };
+
+  function signOut(auth: any) {
+    throw new Error("Function not implemented.");
+  }
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">

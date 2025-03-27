@@ -8,7 +8,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { useAuth } from '@/context/auth-context'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
-import { collection, getDocs, doc, updateDoc, arrayUnion } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore'
 import { db } from '@/FirebaseConfig'
 import { toast } from '@/components/ui/use-toast'
 import {
@@ -18,6 +18,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet"
+import { ShowRelevantCandidatesButton } from "@/components/show-relevant-candidates-button"
 
 interface Job {
   job_id: string
@@ -60,35 +61,42 @@ export default function JobPage() {
 
       try {
         const jobsCollection = collection(db, "jobs")
-        const querySnapshot = await getDocs(jobsCollection)
+        const jobsSnapshot = await getDocs(jobsCollection)
+        const fetchedJobs: Job[] = []
 
-        const fetchedJobs: Job[] = querySnapshot.docs.map(doc => {
-          const data = doc.data()
-          return {
-            job_id: doc.id,
-            title: data.title,
-            company: data.company,
-            location: data.location,
-            employment_type: data.employment_type,
-            experience_required: data.experience_required,
-            salary_range: data.salary_range,
-            created_at: data.created_at.toDate(),
-            description: data.description,
-            status: data.status,
-            total_applications: data.total_applications,
-            shortlisted: data.shortlisted,
-            rejected: data.rejected,
-            in_progress: data.in_progress,
-            benefits: data.benefits || [],
-            requirements: data.requirements || [],
-            skills_required: data.skills_required || [],
-            metadata: data.metadata || {
-              created_by: '',
-              last_modified_by: ''
-            },
-            assigned_recruiters: data.assigned_recruiters || []
+        // Fetch each job's data from the nested structure
+        for (const jobDoc of jobsSnapshot.docs) {
+          const jobDataRef = doc(db, "jobs", jobDoc.id, "data", "details")
+          const jobDataSnap = await getDoc(jobDataRef)
+          
+          if (jobDataSnap.exists()) {
+            const data = jobDataSnap.data()
+            fetchedJobs.push({
+              job_id: jobDoc.id,
+              title: data.title,
+              company: data.company,
+              location: data.location,
+              employment_type: data.employment_type,
+              experience_required: data.experience_required,
+              salary_range: data.salary_range,
+              created_at: data.created_at.toDate(),
+              description: data.description,
+              status: data.status,
+              total_applications: data.total_applications,
+              shortlisted: data.shortlisted,
+              rejected: data.rejected,
+              in_progress: data.in_progress,
+              benefits: data.benefits || [],
+              requirements: data.requirements || [],
+              skills_required: data.skills_required || [],
+              metadata: data.metadata || {
+                created_by: '',
+                last_modified_by: ''
+              },
+              assigned_recruiters: data.assigned_recruiters || []
+            })
           }
-        })
+        }
 
         setJobs(fetchedJobs)
       } catch (error) {
@@ -125,8 +133,8 @@ export default function JobPage() {
 
       setIsAssigning(true)
       try {
-        const jobRef = doc(db, "jobs", selectedJob.job_id)
-        await updateDoc(jobRef, {
+        const jobDataRef = doc(db, "jobs", selectedJob.job_id, "data", "details")
+        await updateDoc(jobDataRef, {
           assigned_recruiters: arrayUnion(user.uid),
           updated_at: new Date(),
           metadata: {
@@ -263,8 +271,9 @@ export default function JobPage() {
               </div>
             </div>
 
-            {/* Assignment Button */}
-            <div className="flex justify-end border-t pt-4">
+            {/* Assignment and Candidates Buttons */}
+            <div className="flex justify-end gap-4 border-t pt-4">
+              <ShowRelevantCandidatesButton jobId={selectedJob.job_id} />
               <Button
                 onClick={handleAssignJob}
                 disabled={isAssigning || (selectedJob.assigned_recruiters || []).includes(user?.uid || '')}

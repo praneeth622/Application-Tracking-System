@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select"
 import { useRouter } from 'next/navigation'
 import { toast } from '@/components/ui/use-toast'
-import { addDoc, collection, Timestamp } from 'firebase/firestore'
+import { addDoc, collection, Timestamp, doc, writeBatch } from 'firebase/firestore'
 import { db } from '@/FirebaseConfig' // Adjust the path to your Firebase configuration file
 import { v4 as uuidv4 } from 'uuid'
 import { SkillInput } from "@/components/skill-input"
@@ -73,14 +73,18 @@ export default function CreateJobPage() {
     try {
       if (!user) throw new Error('User not authenticated')
 
+      // Generate a unique job ID
+      const jobId = `job_${uuidv4()}`
+
       // Convert text areas with multiple lines to arrays
       const requirementsArray = formData.requirements.toString().split('\n').filter(Boolean)
       const benefitsArray = formData.benefits.toString().split('\n').filter(Boolean)
       const responsibilitiesArray = formData.key_responsibilities.toString().split('\n').filter(Boolean)
       const niceToHaveArray = formData.nice_to_have_skills.toString().split('\n').filter(Boolean)
 
+      // Create job data object
       const jobData = {
-        job_id: `job_${uuidv4()}`,
+        job_id: jobId,
         title: formData.title,
         company: formData.company,
         location: formData.location,
@@ -105,16 +109,37 @@ export default function CreateJobPage() {
         created_at: Timestamp.now(),
         updated_at: Timestamp.now(),
         hr_id: user.uid,
-        resumes: [],
         metadata: {
           created_by: user.email || '',
           last_modified_by: user.email || ''
         }
       }
 
-      // Add the job to Firestore
-      const jobsRef = collection(db, 'jobs')
-      await addDoc(jobsRef, jobData)
+      // Create the nested structure
+      const jobRef = doc(db, "jobs", jobId)
+      const jobDetailsRef = doc(db, "jobs", jobId, "data", "details")
+      const jobResumesRef = doc(db, "jobs", jobId, "resumes", "details")
+
+      // Create a batch to ensure all writes succeed or fail together
+      const batch = writeBatch(db)
+
+      // Add the job document
+      batch.set(jobRef, {
+        created_at: Timestamp.now(),
+        hr_id: user.uid
+      })
+
+      // Add job details
+      batch.set(jobDetailsRef, jobData)
+
+      // Initialize resumes collection
+      batch.set(jobResumesRef, {
+        resumes: [],
+        updated_at: Timestamp.now()
+      })
+
+      // Commit the batch
+      await batch.commit()
 
       toast({
         title: "Success",
