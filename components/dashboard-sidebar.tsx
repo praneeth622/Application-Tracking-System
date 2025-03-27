@@ -1,6 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useAuth } from "@/context/auth-context"
+import { doc, getDoc } from "firebase/firestore"
+import { db } from "@/FirebaseConfig"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import {
@@ -24,10 +27,36 @@ interface DashboardSidebarProps {
   setIsOpen: (isOpen: boolean) => void
 }
 
+interface UserProfile {
+  name: string
+  email: string
+  role: string
+  profileComplete?: boolean
+}
+
 export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
+  const { user } = useAuth()
   const isMobile = useMobile()
   const [activeItem, setActiveItem] = useState("upload")
   const [isHovering, setIsHovering] = useState<string | null>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user) return
+
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid))
+        if (userDoc.exists()) {
+          setProfile(userDoc.data() as UserProfile)
+        }
+      } catch (error) {
+        console.error("Error fetching user profile:", error)
+      }
+    }
+
+    fetchUserProfile()
+  }, [user])
 
   const sidebarVariants = {
     expanded: {
@@ -61,6 +90,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
     { id: "upload", label: "Analyze Resume", icon: <FileText className="w-5 h-5" />, href: "/upload-resume" },
     { id: "profiles", label: "My Profiles", icon: <User className="w-5 h-5" />, href: "/profiles" },
     { id: "keywords", label: "Keyword Matcher", icon: <Search className="w-5 h-5" />, href: "/keyword-matcher" },
+    { id: "jobs", label: "Job Management", icon: <Briefcase className="w-5 h-5" />, href: "/job" },
   ]
 
   const secondaryNavItems = [
@@ -221,8 +251,12 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
               </div>
               {(isOpen || isMobile) && (
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">John Doe</div>
-                  <div className="text-xs text-muted-foreground truncate">john.doe@example.com</div>
+                  <div className="text-sm font-medium truncate">
+                    {profile?.name || 'Loading...'}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {profile?.email || user?.email || 'Loading...'}
+                  </div>
                 </div>
               )}
               <motion.button
