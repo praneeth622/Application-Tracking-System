@@ -1,12 +1,10 @@
 import type { Metadata } from 'next'
 import { Roboto, Open_Sans } from 'next/font/google'
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from "@/context/auth-context"
 import { FirebaseProvider } from "@/components/providers/firebase-provider"
 import { ThemeProvider } from "@/components/providers/theme-provider"
-
-
+import { Toaster } from "sonner"
 
 export const metadata: Metadata = {
   title: 'ATS Resume Tracker',
