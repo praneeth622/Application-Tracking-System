@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { collection, query, where, getDocs, doc, getDoc, writeBatch } from "firebase/firestore"
+import { collection, query, where, getDocs, doc, getDoc, writeBatch, onSnapshot } from "firebase/firestore"
 import { db } from "@/FirebaseConfig"
 import { ArrowLeft, LayoutGrid, List } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -61,7 +61,6 @@ interface ResumeData {
   };
 }
 
-
 export type CandidateStatus = 
   | 'shortlisted'
   | 'contacted'
@@ -73,14 +72,23 @@ export type CandidateStatus =
   | 'disapproved'
   | 'pending';
 
+interface StatusHistoryEntry {
+  status: CandidateStatus;
+  timestamp: string;
+  updatedBy: string;
+  [key: string]: any; // For additional data
+}
+
 export interface CandidateTracking {
   status: CandidateStatus;
-  rateConfirmed?: number;
-  interviewDate?: Date;
-  contactedDate?: Date;
-  notes?: string;
-  lastUpdated: Date;
+  statusHistory: StatusHistoryEntry[];
+  lastUpdated: string;
   updatedBy: string;
+  rateConfirmed?: number;
+  interviewDate?: string;
+  contactedDate?: string;
+  notes?: string;
+  [key: string]: any; // For additional tracking data
 }
 
 export default function CandidatesPage() {
@@ -96,19 +104,14 @@ export default function CandidatesPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [debugInfo, setDebugInfo] = useState<any>(null)
 
-  // Add new state variables
-
   const [showFilters, setShowFilters] = useState(false);
 
-  // Update the fetchResumes function
   const fetchResumes = async () => {
     try {
-      // Get all users
       const usersRef = collection(db, "users");
       const usersSnapshot = await getDocs(usersRef);
       let allResumes: any[] = [];
 
-      // Fetch resumes from each user
       for (const userDoc of usersSnapshot.docs) {
         try {
           const userResumesRef = doc(db, "users", userDoc.id, "resumes", "data");
@@ -117,7 +120,6 @@ export default function CandidatesPage() {
           if (userResumesDoc.exists()) {
             const userData = userResumesDoc.data();
             if (userData.resumes && Array.isArray(userData.resumes)) {
-              // Add user information to each resume
               const userResumes = userData.resumes.map((resume: any) => ({
                 ...resume,
                 userId: userDoc.id,
@@ -128,7 +130,6 @@ export default function CandidatesPage() {
           }
         } catch (error) {
           console.warn(`Failed to fetch resumes for user ${userDoc.id}:`, error);
-          // Continue with next user instead of breaking the entire operation
           continue;
         }
       }
@@ -142,7 +143,6 @@ export default function CandidatesPage() {
     }
   };
 
-  // Update the analyzeCandidates function to store profiles in the new location
   useEffect(() => {
     const analyzeCandidates = async () => {
       if (!user) {
@@ -155,7 +155,6 @@ export default function CandidatesPage() {
       setAnalysisError(null);
 
       try {
-        // First check if we have stored results in the new path
         const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
         const storedProfilesDoc = await getDoc(relevantProfilesRef);
 
@@ -170,7 +169,6 @@ export default function CandidatesPage() {
           }
         }
 
-        // If no stored results, perform new analysis
         console.log("Performing new analysis");
         const jobDetailsRef = doc(db, "jobs", jobId, "data", "details");
         const jobDetailsDoc = await getDoc(jobDetailsRef);
@@ -211,10 +209,8 @@ export default function CandidatesPage() {
             analysis: resumesData.find((r: ResumeData) => r.filename === result.filename)?.analysis || {}
           }));
 
-        // Store results in both locations using batch write
         const batch = writeBatch(db);
 
-        // Store in original location
         const jobResumesRef = doc(db, "jobs", jobId, "resumes", "details");
         batch.set(jobResumesRef, {
           relevant_candidates: matchedCandidates,
@@ -223,7 +219,6 @@ export default function CandidatesPage() {
           status: "analyzed"
         });
 
-        // Store in new relevant_profiles location
         batch.set(relevantProfilesRef, {
           candidates: matchedCandidates,
           metadata: {
@@ -252,7 +247,6 @@ export default function CandidatesPage() {
     analyzeCandidates();
   }, [jobId, user]);
 
-  // Add function to load stored results if they exist
   useEffect(() => {
     const loadStoredResults = async () => {
       if (!jobId) return
@@ -277,19 +271,6 @@ export default function CandidatesPage() {
     loadStoredResults()
   }, [jobId])
 
-  // Add debug info to the UI
-//   const renderDebugInfo = () => {
-//     if (!debugInfo) return null
-//     return (
-//       <div className="mb-4 p-4 bg-gray-100 rounded-lg text-sm">
-//         <h4 className="font-medium mb-2">Debug Information:</h4>
-//         <pre className="whitespace-pre-wrap">
-//           {JSON.stringify(debugInfo, null, 2)}
-//         </pre>
-//       </div>
-//     )
-//   }
-
   const refreshCandidates = async () => {
     try {
       const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
@@ -307,6 +288,36 @@ export default function CandidatesPage() {
     }
   };
 
+  const fetchCandidatesByStatus = async (status: CandidateStatus | 'all') => {
+    try {
+      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
+      const profilesDoc = await getDoc(relevantProfilesRef);
+
+      if (!profilesDoc.exists()) {
+        return [];
+      }
+
+      const data = profilesDoc.data();
+      let filteredCandidates = data.candidates || [];
+
+      if (status !== 'all') {
+        filteredCandidates = filteredCandidates.filter(
+          (candidate: Candidate) => candidate.tracking?.status === status
+        );
+      }
+
+      return filteredCandidates.sort((a: Candidate, b: Candidate) => {
+        const dateA = a.tracking?.lastUpdated ? new Date(a.tracking.lastUpdated).getTime() : 0;
+        const dateB = b.tracking?.lastUpdated ? new Date(b.tracking.lastUpdated).getTime() : 0;
+        return dateB - dateA;
+      });
+
+    } catch (error) {
+      console.error("Error fetching candidates:", error);
+      throw new Error("Failed to fetch candidates");
+    }
+  };
+
   const { 
     currentView, 
     setCurrentView,
@@ -315,6 +326,49 @@ export default function CandidatesPage() {
     searchQuery,
     setSearchQuery
   } = useHiringStages()
+
+  useEffect(() => {
+    if (!jobId) return;
+
+    const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
+    
+    const unsubscribe = onSnapshot(relevantProfilesRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        if (data.candidates) {
+          const filteredCandidates = statusFilter === 'all' 
+            ? data.candidates 
+            : data.candidates.filter((c: Candidate) => c.tracking?.status === statusFilter);
+          
+          const sortedCandidates = filteredCandidates.sort((a: Candidate, b: Candidate) => {
+            const dateA = a.tracking?.lastUpdated ? new Date(a.tracking.lastUpdated).getTime() : 0;
+            const dateB = b.tracking?.lastUpdated ? new Date(b.tracking.lastUpdated).getTime() : 0;
+            return dateB - dateA;
+          });
+
+          setCandidates(sortedCandidates);
+        }
+      }
+    }, (error) => {
+      console.error("Error in real-time updates:", error);
+      toast.error("Failed to get real-time updates");
+    });
+
+    return () => unsubscribe();
+  }, [jobId, statusFilter]);
+
+  const handleStatusFilterChange = async (newStatus: CandidateStatus | 'all') => {
+    setStatusFilter(newStatus);
+    setIsLoading(true);
+    try {
+      const filteredCandidates = await fetchCandidatesByStatus(newStatus);
+      setCandidates(filteredCandidates);
+    } catch (error) {
+      toast.error("Failed to filter candidates");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
@@ -330,9 +384,6 @@ export default function CandidatesPage() {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
         <div className="container mx-auto py-8 px-4 md:px-8">
-          {/* Add debug info */}
-          {/* {process.env.NODE_ENV === 'development' && renderDebugInfo()} */}
-          
           <Button
             variant="ghost"
             className="mb-6"
@@ -370,7 +421,7 @@ export default function CandidatesPage() {
             <div className="flex-1 flex items-center gap-4">
               <Select
                 value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value as CandidateStatus | 'all')}
+                onValueChange={(value) => handleStatusFilterChange(value as CandidateStatus | 'all')}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Filter by status" />
@@ -498,9 +549,9 @@ export default function CandidatesPage() {
                             <p>Rate: ${candidate.tracking.rateConfirmed}/hr</p>
                           )}
                           {candidate.tracking.interviewDate && (
-                            <p>Interview: {format(candidate.tracking.interviewDate, 'PPp')}</p>
+                            <p>Interview: {format(new Date(candidate.tracking.interviewDate), 'PPp')}</p>
                           )}
-                          <p>Last updated: {format(candidate.tracking.lastUpdated, 'PPp')}</p>
+                          <p>Last updated: {format(new Date(candidate.tracking.lastUpdated), 'PPp')}</p>
                         </div>
                       )}
                     </div>

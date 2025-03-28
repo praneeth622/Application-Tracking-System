@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/popover"
 import { format } from "date-fns"
 import { Calendar as CalendarIcon, DollarSign } from "lucide-react"
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, updateDoc, writeBatch, getDoc, serverTimestamp, increment } from 'firebase/firestore'
 import { db } from '@/FirebaseConfig'
 import { toast } from 'sonner'
 import type { Candidate, CandidateStatus } from '@/app/jobs/[jobId]/candidates/page'
@@ -30,40 +30,72 @@ export function CandidateActions({
   const [rate, setRate] = useState(candidate.tracking?.rateConfirmed || '')
   const [interviewDate, setInterviewDate] = useState<Date>()
 
-  const updateCandidateStatus = async (status: CandidateStatus) => {
+  const updateCandidateStatus = async (candidate: Candidate, status: CandidateStatus, additionalData = {}) => {
     try {
-      const candidateRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles")
-      await updateDoc(candidateRef, {
-        [`candidates.${candidate.filename}.tracking`]: {
-          ...candidate.tracking,
-          status,
-          lastUpdated: new Date(),
-          updatedBy: user?.email || 'unknown'
+      const batch = writeBatch(db);
+      
+      // Get reference to relevant_profiles document
+      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
+      const profilesDoc = await getDoc(relevantProfilesRef);
+      
+      if (!profilesDoc.exists()) {
+        throw new Error("Profiles document not found");
+      }
+
+      const currentData = profilesDoc.data();
+      const timestamp = new Date().toISOString();
+
+      // Update the candidate's status and tracking info
+      const updatedCandidates = currentData.candidates.map((c: Candidate) => {
+        if (c.filename === candidate.filename) {
+          return {
+            ...c,
+            tracking: {
+              ...c.tracking,
+              status,
+              statusHistory: [
+                ...(c.tracking?.statusHistory || []),
+                {
+                  status,
+                  timestamp,
+                  updatedBy: user?.email || 'unknown',
+                  ...additionalData
+                }
+              ],
+              lastUpdated: timestamp,
+              updatedBy: user?.email || 'unknown',
+              ...additionalData
+            }
+          };
         }
-      })
-      onUpdate()
-      toast.success("Status updated successfully")
+        return c;
+      });
+
+      // Update the document with new data
+      batch.update(relevantProfilesRef, {
+        candidates: updatedCandidates,
+        'metadata.lastUpdated': serverTimestamp(),
+        [`statusCounts.${status}`]: increment(1),
+        // Decrement previous status count if it exists
+        ...(candidate.tracking?.status && {
+          [`statusCounts.${candidate.tracking.status}`]: increment(-1)
+        })
+      });
+
+      await batch.commit();
+      onUpdate();
+      toast.success(`Status updated to ${status}`);
     } catch (error) {
-      toast.error("Failed to update status")
+      console.error("Error updating status:", error);
+      toast.error("Failed to update status");
     }
   }
 
   const confirmRate = async () => {
     if (!rate) return
     try {
-      const candidateRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles")
-      await updateDoc(candidateRef, {
-        [`candidates.${candidate.filename}.tracking`]: {
-          ...candidate.tracking,
-          rateConfirmed: parseFloat(rate.toString()),
-          status: 'rate_confirmed',
-          lastUpdated: new Date(),
-          updatedBy: user?.email || 'unknown'
-        }
-      })
+      await updateCandidateStatus(candidate, 'rate_confirmed', { rateConfirmed: parseFloat(rate.toString()) });
       setShowRateInput(false)
-      onUpdate()
-      toast.success("Rate confirmed successfully")
     } catch (error) {
       toast.error("Failed to confirm rate")
     }
@@ -71,19 +103,8 @@ export function CandidateActions({
 
   const scheduleInterview = async (date: Date) => {
     try {
-      const candidateRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles")
-      await updateDoc(candidateRef, {
-        [`candidates.${candidate.filename}.tracking`]: {
-          ...candidate.tracking,
-          interviewDate: date,
-          status: 'interview_scheduled',
-          lastUpdated: new Date(),
-          updatedBy: user?.email || 'unknown'
-        }
-      })
+      await updateCandidateStatus(candidate, 'interview_scheduled', { interviewDate: date });
       setShowCalendar(false)
-      onUpdate()
-      toast.success("Interview scheduled successfully")
     } catch (error) {
       toast.error("Failed to schedule interview")
     }
@@ -94,7 +115,7 @@ export function CandidateActions({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => updateCandidateStatus('shortlisted')}
+        onClick={() => updateCandidateStatus(candidate, 'shortlisted')}
       >
         Shortlist
       </Button>
@@ -102,7 +123,7 @@ export function CandidateActions({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => updateCandidateStatus('contacted')}
+        onClick={() => updateCandidateStatus(candidate, 'contacted')}
       >
         Mark Contacted
       </Button>
@@ -110,7 +131,7 @@ export function CandidateActions({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => updateCandidateStatus('interested')}
+        onClick={() => updateCandidateStatus(candidate, 'interested')}
       >
         Mark Interested
       </Button>
@@ -162,7 +183,7 @@ export function CandidateActions({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => updateCandidateStatus('approved')}
+        onClick={() => updateCandidateStatus(candidate, 'approved')}
         className="bg-green-100 hover:bg-green-200"
       >
         Approve
@@ -171,7 +192,7 @@ export function CandidateActions({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => updateCandidateStatus('disapproved')}
+        onClick={() => updateCandidateStatus(candidate, 'disapproved')}
         className="bg-red-100 hover:bg-red-200"
       >
         Disapprove
