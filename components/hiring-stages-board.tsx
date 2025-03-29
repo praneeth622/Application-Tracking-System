@@ -1,16 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd"
+import { DragDropContext, Droppable, Draggable, DropResult } from "react-beautiful-dnd"
 import { motion } from "framer-motion"
 import {
   Calendar,
-  Clock,
   UserCheck,
-  UserX,
   Mail,
   DollarSign,
-  Calendar as CalendarIcon,
   CheckCircle,
   XCircle
 } from "lucide-react"
@@ -38,7 +34,6 @@ interface HiringStagesBoardProps {
 }
 
 export function HiringStagesBoard({ candidates, jobId, onCandidateUpdate }: HiringStagesBoardProps) {
-  const [isDragging, setIsDragging] = useState(false)
 
   const getCandidatesByStage = (stage: string) => {
     return candidates.filter(candidate => 
@@ -65,9 +60,7 @@ export function HiringStagesBoard({ candidates, jobId, onCandidateUpdate }: Hiri
     }
   }
 
-  const onDragEnd = (result: any) => {
-    setIsDragging(false)
-    
+  const onDragEnd = (result: DropResult) => {
     if (!result.destination) return
 
     const { draggableId, destination } = result
@@ -77,10 +70,7 @@ export function HiringStagesBoard({ candidates, jobId, onCandidateUpdate }: Hiri
   }
 
   return (
-    <DragDropContext
-      onDragStart={() => setIsDragging(true)}
-      onDragEnd={onDragEnd}
-    >
+    <DragDropContext onDragEnd={onDragEnd}>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
         {stages.map((stage) => (
           <Droppable key={stage.id} droppableId={stage.id}>

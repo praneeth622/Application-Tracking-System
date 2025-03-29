@@ -7,9 +7,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { format } from "date-fns"
 import { Calendar as CalendarIcon, DollarSign } from "lucide-react"
-import { doc, updateDoc, writeBatch, getDoc, serverTimestamp, increment } from 'firebase/firestore'
+import { doc, writeBatch, getDoc, serverTimestamp, increment } from 'firebase/firestore'
 import { db } from '@/FirebaseConfig'
 import { toast } from 'sonner'
 import type { Candidate, CandidateStatus } from '@/app/jobs/[jobId]/candidates/page'
@@ -28,7 +27,7 @@ export function CandidateActions({
   const [showRateInput, setShowRateInput] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
   const [rate, setRate] = useState(candidate.tracking?.rateConfirmed || '')
-  const [interviewDate, setInterviewDate] = useState<Date>()
+  const [interviewDate] = useState<Date>()
 
   const updateCandidateStatus = async (candidate: Candidate, status: CandidateStatus, additionalData = {}) => {
     try {
@@ -96,7 +95,8 @@ export function CandidateActions({
     try {
       await updateCandidateStatus(candidate, 'rate_confirmed', { rateConfirmed: parseFloat(rate.toString()) });
       setShowRateInput(false)
-    } catch (error) {
+    } catch (error: unknown) {
+      console.error('Error confirming rate:', error);
       toast.error("Failed to confirm rate")
     }
   }
@@ -105,7 +105,8 @@ export function CandidateActions({
     try {
       await updateCandidateStatus(candidate, 'interview_scheduled', { interviewDate: date });
       setShowCalendar(false)
-    } catch (error) {
+    } catch (error: unknown) {
+      console.error('Error scheduling interview:', error);
       toast.error("Failed to schedule interview")
     }
   }

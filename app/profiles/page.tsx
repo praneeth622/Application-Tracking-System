@@ -3,34 +3,51 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/context/auth-context'
 import { db } from '@/FirebaseConfig'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { doc, getDoc, Timestamp } from 'firebase/firestore'
 import { DashboardSidebar } from '@/components/dashboard-sidebar'
 import { motion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/use-media-query'
-import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/use-toast'
 import { useRouter } from 'next/navigation'
+
+interface Analysis {
+  name: string
+  email: string
+  key_skills: string[]
+  education_details: Array<{
+    degree: string
+    major: string
+    institute: string
+    graduation_year?: string
+    location?: string
+  }>
+  work_experience_details: Array<{
+    company: string
+    position: string
+    dates: string
+    responsibilities: string[]
+    location?: string
+  }>
+  experience_years?: number
+}
 
 interface Profile {
   filename: string
   filelink: string
-  uploadedAt: any
-  analysis: any
+  uploadedAt: Timestamp
+  analysis: Analysis
   aiAnalysis?: string
   companyFeedback?: string[]
 }
 
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!)
 
 export default function ProfilesPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [profiles, setProfiles] = useState<Profile[]>([])
-  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null)
-  const [newFeedback, setNewFeedback] = useState("")
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  // const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null)
+  // const [newFeedback, setNewFeedback] = useState("")
+  // const [ setIsAnalyzing] = useState(false)
   const { user } = useAuth()
   const router = useRouter()
 
@@ -63,91 +80,8 @@ export default function ProfilesPage() {
   }, [user])
 
   // Generate AI analysis for a profile
-  const generateAnalysis = async (profile: Profile) => {
-    
-    try {
-      setIsAnalyzing(true)
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" })
-
-      const prompt = `Analyze this candidate's profile and provide a detailed professional assessment including:
-      1. Key strengths and expertise
-      2. Experience level and suitability
-      3. Technical skills evaluation
-      4. Potential role fits
-      5. Areas for improvement
-      6. Notable achievements
-      7. Overall recommendation
-
-      Use the following information:
-      ${JSON.stringify(profile.analysis)}`
-
-      const result = await model.generateContent(prompt)
-      const analysis = await result.response.text()
-
-      // Update profile in state and database
-      const updatedProfiles = profiles.map(p => 
-        p.filename === profile.filename ? { ...p, aiAnalysis: analysis } : p
-      )
-
-      const userDocRef = doc(db, "users", user?.uid, "resumes", "data");
-      await updateDoc(userDocRef, { resumes: updatedProfiles })
-
-      setProfiles(updatedProfiles)
-      setSelectedProfile({ ...profile, aiAnalysis: analysis })
-
-      toast({
-        title: "Success",
-        description: "Profile analysis generated successfully",
-      })
-    } catch (error) {
-      console.error("Error generating analysis:", error)
-      toast({
-        title: "Error",
-        description: "Failed to generate analysis",
-        variant: "destructive",
-      })
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }
 
   // Add company feedback
-  const addFeedback = async () => {
-    if (!selectedProfile || !newFeedback.trim()) return
-
-    try {
-      const updatedProfile = {
-        ...selectedProfile,
-        companyFeedback: [
-          ...(selectedProfile.companyFeedback || []),
-          newFeedback.trim()
-        ]
-      }
-
-      const updatedProfiles = profiles.map(p =>
-        p.filename === selectedProfile.filename ? updatedProfile : p
-      )
-
-      const userDocRef = doc(db, "users", user.uid, "resumes", "data");
-      await updateDoc(userDocRef, { resumes: updatedProfiles })
-
-      setProfiles(updatedProfiles)
-      setSelectedProfile(updatedProfile)
-      setNewFeedback("")
-
-      toast({
-        title: "Success",
-        description: "Feedback added successfully",
-      })
-    } catch (error) {
-      console.error("Error adding feedback:", error)
-      toast({
-        title: "Error",
-        description: "Failed to add feedback",
-        variant: "destructive",
-      })
-    }
-  }
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">

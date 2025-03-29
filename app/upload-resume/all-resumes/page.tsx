@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "@/context/auth-context"
 import { db } from "@/FirebaseConfig"
-import { collection, doc, getDoc, getDocs } from "firebase/firestore"
+import { collection, getDocs } from "firebase/firestore"
 import { motion } from "framer-motion"
 import { RecentFileCard } from "@/components/recent-file-card"
 import { FileText } from "lucide-react"
@@ -17,7 +17,34 @@ interface ResumeData {
     seconds: number
     nanoseconds: number
   }
-  analysis: any
+  analysis: {
+    name: string
+    email: string
+    phone_number?: string
+    social_profile_links?: string[]
+    key_skills: string[]
+    education_details: Array<{
+      degree: string
+      major: string
+      institute: string
+      location: string
+      dates: string
+    }>
+    work_experience_details: Array<{
+      company: string
+      title: string
+      location: string
+      dates: string
+      responsibilities: string[]
+    }>
+    project_experience?: Array<{
+      name: string
+      description: string
+      technologies: string[]
+    }>
+    profile_summary: string
+    score?: number
+  }
 }
 
 export default function AllResumesPage() {
@@ -35,9 +62,11 @@ export default function AllResumesPage() {
         const querySnapshot = await getDocs(resumeCollectionRef); // Get all documents in the subcollection
     
         const resumes = querySnapshot.docs.map((doc) => ({
-          id: doc.id, 
-          ...doc.data()
-        }));
+          filename: doc.data().filename,
+          filelink: doc.data().filelink,
+          uploadedAt: doc.data().uploadedAt,
+          analysis: doc.data().analysis
+        } as ResumeData));
     
         setResumes(resumes); // Store the fetched resumes
       } catch (error) {
@@ -90,7 +119,7 @@ export default function AllResumesPage() {
           <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-medium">No resumes found</h3>
           <p className="text-muted-foreground">
-            You haven't uploaded any resumes yet.
+            You haven&apos;t uploaded any resumes yet.
           </p>
         </div>
       )}

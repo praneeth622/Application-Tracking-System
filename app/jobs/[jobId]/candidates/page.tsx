@@ -5,14 +5,13 @@ import { useParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { collection, query, where, getDocs, doc, getDoc, writeBatch, onSnapshot } from "firebase/firestore"
+import { collection, getDocs, doc, getDoc, writeBatch, onSnapshot } from "firebase/firestore"
 import { db } from "@/FirebaseConfig"
 import { ArrowLeft, LayoutGrid, List } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
-import { calculateMatchScore } from "@/utils/calculate-match-score"
 import { useAuth } from "@/context/auth-context"
-import { analyzeMatch, analyzeBatchMatches } from "@/utils/analyze-match"
+import { analyzeBatchMatches } from "@/utils/analyze-match"
 import { toast } from "sonner"
 import { CandidateActions } from "@/components/candidate-actions"
 import { format } from "date-fns"
@@ -36,6 +35,17 @@ interface MatchAnalysis {
   overallAssessment: string
 }
 
+interface WorkExperience {
+  company: string
+  position: string
+  duration?: {
+    start: string
+    end?: string
+  }
+  responsibilities?: string[]
+  technologies?: string[]
+}
+
 export interface Candidate {
   filename: string
   name: string
@@ -48,17 +58,26 @@ export interface Candidate {
       major: string
       institute: string
     }>
-    work_experience_details: any[]
+    work_experience_details: WorkExperience[]
   }
   tracking?: CandidateTracking
 }
 
 interface ResumeData {
-  filename: string;
+  filename: string
   analysis: {
-    name: string;
-    email: string;
-  };
+    name: string
+    email: string
+    key_skills: string[]
+    education_details: Array<{
+      degree: string
+      major: string
+      institute: string
+    }>
+    work_experience_details: WorkExperience[]
+  }
+  userId: string
+  userEmail: string
 }
 
 export type CandidateStatus = 
@@ -72,23 +91,32 @@ export type CandidateStatus =
   | 'disapproved'
   | 'pending';
 
+interface AdditionalStatusData {
+  rateConfirmed?: number
+  interviewDate?: string
+  contactedDate?: string
+  notes?: string
+  reason?: string
+  feedback?: string
+}
+
 interface StatusHistoryEntry {
-  status: CandidateStatus;
-  timestamp: string;
-  updatedBy: string;
-  [key: string]: any; // For additional data
+  status: CandidateStatus
+  timestamp: string
+  updatedBy: string
+  additionalData?: AdditionalStatusData
 }
 
 export interface CandidateTracking {
-  status: CandidateStatus;
-  statusHistory: StatusHistoryEntry[];
-  lastUpdated: string;
-  updatedBy: string;
-  rateConfirmed?: number;
-  interviewDate?: string;
-  contactedDate?: string;
-  notes?: string;
-  [key: string]: any; // For additional tracking data
+  status: CandidateStatus
+  statusHistory: StatusHistoryEntry[]
+  lastUpdated: string
+  updatedBy: string
+  rateConfirmed?: number
+  interviewDate?: string
+  contactedDate?: string
+  notes?: string
+  additionalData?: AdditionalStatusData
 }
 
 export default function CandidatesPage() {
@@ -101,16 +129,13 @@ export default function CandidatesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const { user } = useAuth()
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysisError, setAnalysisError] = useState<string | null>(null)
-  const [debugInfo, setDebugInfo] = useState<any>(null)
-
-  const [showFilters, setShowFilters] = useState(false);
+  
 
   const fetchResumes = async () => {
     try {
       const usersRef = collection(db, "users");
       const usersSnapshot = await getDocs(usersRef);
-      let allResumes: any[] = [];
+      let allResumes: ResumeData[] = [];
 
       for (const userDoc of usersSnapshot.docs) {
         try {
@@ -120,7 +145,7 @@ export default function CandidatesPage() {
           if (userResumesDoc.exists()) {
             const userData = userResumesDoc.data();
             if (userData.resumes && Array.isArray(userData.resumes)) {
-              const userResumes = userData.resumes.map((resume: any) => ({
+              const userResumes = userData.resumes.map((resume: Omit<ResumeData, 'userId' | 'userEmail'>) => ({
                 ...resume,
                 userId: userDoc.id,
                 userEmail: userData.user_emailid || 'No email'
@@ -152,7 +177,7 @@ export default function CandidatesPage() {
 
       setIsLoading(true);
       setIsAnalyzing(true);
-      setAnalysisError(null);
+      
 
       try {
         const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
@@ -181,33 +206,42 @@ export default function CandidatesPage() {
         const resumesData = await fetchResumes();
 
         if (resumesData.length === 0) {
-          setAnalysisError("No resumes found in the system");
+          toast.error("No resumes found in the system");
+          setIsLoading(false);
+          setIsAnalyzing(false);
           return;
         }
 
         const analysisResults = await analyzeBatchMatches(jobData, resumesData);
 
         if (!analysisResults || analysisResults.length === 0) {
-          setAnalysisError("No matching candidates found");
+          toast.error("No matching candidates found");
           return;
         }
 
         const matchedCandidates = analysisResults
           .filter(result => result.matchPercentage > 50)
-          .map(result => ({
-            filename: result.filename,
-            name: resumesData.find((r: ResumeData) => r.filename === result.filename)?.analysis.name || "Unknown",
-            email: resumesData.find((r: ResumeData) => r.filename === result.filename)?.analysis.email || "No email",
-            matchAnalysis: {
-              matchPercentage: result.matchPercentage,
-              matchingSkills: result.matchingSkills || [],
-              missingRequirements: result.missingRequirements || [],
-              experienceMatch: result.experienceMatch || false,
-              educationMatch: result.educationMatch || false,
-              overallAssessment: result.overallAssessment || ""
-            },
-            analysis: resumesData.find((r: ResumeData) => r.filename === result.filename)?.analysis || {}
-          }));
+          .map(result => {
+            const resumeData = resumesData.find((r: ResumeData) => r.filename === result.filename);
+            return {
+              filename: result.filename,
+              name: resumeData?.analysis.name || "Unknown",
+              email: resumeData?.analysis.email || "No email",
+              matchAnalysis: {
+                matchPercentage: result.matchPercentage,
+                matchingSkills: result.matchingSkills || [],
+                missingRequirements: result.missingRequirements || [],
+                experienceMatch: result.experienceMatch || false,
+                educationMatch: result.educationMatch || false,
+                overallAssessment: result.overallAssessment || ""
+              },
+              analysis: {
+                key_skills: resumeData?.analysis.key_skills || [],
+                education_details: resumeData?.analysis.education_details || [],
+                work_experience_details: resumeData?.analysis.work_experience_details || []
+              }
+            } as Candidate;
+          });
 
         const batch = writeBatch(db);
 
@@ -236,7 +270,6 @@ export default function CandidatesPage() {
       } catch (error) {
         console.error("Error in analyzeCandidates:", error);
         const errorMessage = error instanceof Error ? error.message : "Failed to analyze candidates";
-        setAnalysisError(errorMessage);
         toast.error(`Analysis failed: ${errorMessage}`);
       } finally {
         setIsLoading(false);
@@ -363,7 +396,7 @@ export default function CandidatesPage() {
     try {
       const filteredCandidates = await fetchCandidatesByStatus(newStatus);
       setCandidates(filteredCandidates);
-    } catch (error) {
+    } catch  {
       toast.error("Failed to filter candidates");
     } finally {
       setIsLoading(false);

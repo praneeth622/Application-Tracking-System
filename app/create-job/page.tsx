@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select"
 import { useRouter } from 'next/navigation'
 import { toast } from '@/components/ui/use-toast'
-import { addDoc, collection, Timestamp, doc, writeBatch } from 'firebase/firestore'
+import { Timestamp, doc, writeBatch } from 'firebase/firestore'
 import { db } from '@/FirebaseConfig' // Adjust the path to your Firebase configuration file
 import { v4 as uuidv4 } from 'uuid'
 import { SkillInput } from "@/components/skill-input"

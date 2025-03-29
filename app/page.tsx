@@ -27,6 +27,7 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { UserDropdown } from "@/components/user-dropdown";
 import { auth } from "@/FirebaseConfig";
+import { signOut } from "firebase/auth";
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -214,9 +215,6 @@ export default function LandingPage() {
     },
   };
 
-  function signOut(auth: any) {
-    throw new Error("Function not implemented.");
-  }
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">
@@ -880,7 +878,7 @@ export default function LandingPage() {
                         className="w-full"
                       >
                         <blockquote className="text-xl italic mb-6">
-                          "{testimonial.content}"
+                        &quot;{testimonial.content}&quot;
                         </blockquote>
 
                         <div className="flex items-center">
@@ -925,7 +923,7 @@ export default function LandingPage() {
 
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[120%] max-w-md">
                     <div className="relative">
-                      {testimonials.map((testimonial, index) => (
+                      {testimonials.map((_testimonial, index) => (
                         <motion.div
                           key={index}
                           initial={{ opacity: 0, scale: 0.9, y: 20 }}

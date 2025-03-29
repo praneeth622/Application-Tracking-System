@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { FileText, CheckCircle, ChevronRight, Search, User, BarChart2, Sparkles } from "lucide-react"
+import { FileText, CheckCircle, ChevronRight, Search,  BarChart2, Sparkles } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { DragDropUpload } from "@/components/drag-drop-upload"
-import { RecentFileCard } from "@/components/recent-file-card"
 import { useMobile } from "@/hooks/use-mobile"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/context/auth-context"
@@ -59,7 +58,7 @@ export default function UploadResumePage() {
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   </div>
 
-                  <UserDropdown user={user} />
+                  {user && <UserDropdown user={user} />}
                 </div>
               </div>
             </div>
@@ -153,7 +152,7 @@ export default function UploadResumePage() {
 
                     <div className="flex items-start">
                       <CheckCircle className="w-5 h-5 text-accent mt-0.5 mr-3 flex-shrink-0" />
-                      <p className="text-sm">Include keywords from the job description you're applying to</p>
+                      <p className="text-sm">Include keywords from the job description you&apos;re applying to</p>
                     </div>
 
                     <div className="flex items-start">

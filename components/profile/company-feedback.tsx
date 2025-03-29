@@ -74,7 +74,7 @@ export function CompanyFeedback({ filename, filelink }: CompanyFeedbackProps) {
           (r: ResumeWithFeedback) => r.filename === filename
         );
 
-        let updatedResumes = [...(data.resumes || [])];
+        const updatedResumes = [...(data.resumes || [])];
 
         if (existingResumeIndex !== -1) {
           // Update existing resume feedback

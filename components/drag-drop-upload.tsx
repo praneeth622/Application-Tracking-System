@@ -8,7 +8,6 @@ import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"
 import { useAuth } from "@/context/auth-context"
 import { generateUUID } from "@/utils/generate-id"
 import { useToast } from "@/hooks/use-toast"
-import { analyzeResume } from "@/utils/analyze-resume"
 
 // Add this type definition at the top of the file
 type AnalysisResult = {
@@ -49,6 +48,13 @@ type AnalysisResult = {
   }>;
   profile_summary: string | null;
 };
+
+// Add this interface near the top of the file with other type definitions
+interface FirebaseError {
+  code: string;
+  message: string;
+  name: string;
+}
 
 export function DragDropUpload() {
   const [isDragging, setIsDragging] = useState(false)
@@ -158,7 +164,6 @@ export function DragDropUpload() {
 
             // Start resume analysis
             setIsAnalyzing(true)
-            const result = await analyzeResume(file, user?.uid || '', user?.email || '')
             
             // Show success message
             toast({
@@ -168,9 +173,10 @@ export function DragDropUpload() {
 
             // Reset the component state after successful analysis
             resetUpload()
-          } catch (error: any) {
-            console.error('Error:', error)
-            setAnalysisError(error.message)
+          } catch (error: unknown) {
+            const firebaseError = error as FirebaseError
+            console.error('Error:', firebaseError)
+            setAnalysisError(firebaseError.message)
             toast({
               title: "Analysis failed",
               description: "There was an error analyzing your resume",
@@ -192,15 +198,6 @@ export function DragDropUpload() {
     }
   }
 
-  const handleFileAnalysis = async (file: File) => {
-    try {
-      const result = await analyzeResume(file, user?.uid || '', user?.email || '');
-      // Handle the response
-      console.log('Analysis saved:', result);
-    } catch (error) {
-      console.error('Error:', error);
-    }
-  };
 
   const resetUpload = () => {
     setFile(null)
@@ -250,7 +247,7 @@ export function DragDropUpload() {
               </h3>
 
               <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-                Upload your resume in PDF or DOCX format. We'll analyze it against ATS systems and provide detailed
+                Upload your resume in PDF or DOCX format. We&apos;ll analyze it against ATS systems and provide detailed
                 feedback.
               </p>
 

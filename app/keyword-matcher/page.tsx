@@ -2,23 +2,21 @@
 
 import { useState, useEffect } from 'react'
 import { db } from "@/FirebaseConfig"
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore"
+import { doc, getDoc, Timestamp } from "firebase/firestore"
 import { useAuth } from "@/context/auth-context"
 import { RecentFileCard } from "@/components/recent-file-card"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, Tag, X } from "lucide-react"
+import { Search } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { motion } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Button } from "@/components/ui/button"
 
 // First, let's update the Resume interface to match the JSON structure
 interface Resume {
   filename: string;
   filelink: string;
-  uploadedAt: any;
+  uploadedAt: Timestamp;
   analysis: {
     name: string;
     education_details: Array<{
@@ -37,7 +35,7 @@ interface Resume {
     }>;
     key_skills: string[];
     profile_summary: string;
-    experience_years?: number; // Add this to the interface
+    experience_years?: number;
   };
 }
 
@@ -67,6 +65,8 @@ export default function KeywordMatcherPage() {
         const userDoc = await getDoc(userDocRef);
         
         const allKeywords = new Set<string>();
+        const newEducationFilters = new Set<string>();
+        const newLocations = new Set<string>();
         const fetchedResumes: Resume[] = [];
 
         if (userDoc.exists()) {
@@ -89,25 +89,25 @@ export default function KeywordMatcherPage() {
                 resume.analysis.education_details.forEach(edu => {
                   // Add degree information
                   if (edu.degree) {
-                    educationFilters.add(edu.degree.toLowerCase().trim());
+                    newEducationFilters.add(edu.degree.toLowerCase().trim());
                   }
                   // Add major information
                   if (edu.major) {
-                    educationFilters.add(edu.major.toLowerCase().trim());
+                    newEducationFilters.add(edu.major.toLowerCase().trim());
                   }
                 });
               }
             
-              // Process location from education details instead of work experience
+              // Process location from education details
               if (resume?.analysis?.education_details) {
                 resume.analysis.education_details.forEach(edu => {
                   if (edu.location) {
-                    locations.add(edu.location.toLowerCase().trim());
+                    newLocations.add(edu.location.toLowerCase().trim());
                   }
                 });
               }
             
-              // Process experience years (calculated from work experience dates)
+              // Process experience years
               if (resume?.analysis?.work_experience_details) {
                 let totalExperience = 0;
                 resume.analysis.work_experience_details.forEach(exp => {
@@ -119,7 +119,7 @@ export default function KeywordMatcherPage() {
                     totalExperience += years;
                   }
                 });
-                resume.analysis.experience_years = totalExperience; // Add this to the resume object
+                resume.analysis.experience_years = totalExperience;
               }
             });
           }
@@ -128,8 +128,8 @@ export default function KeywordMatcherPage() {
         // Update state with found data
         setKeywords(allKeywords);
         setResumes(fetchedResumes);
-        setEducationFilters(educationFilters);
-        setLocations(locations);
+        setEducationFilters(newEducationFilters);
+        setLocations(newLocations);
         
       } catch (error) {
         console.error("Error fetching resumes:", error);
@@ -137,7 +137,7 @@ export default function KeywordMatcherPage() {
     };
 
     fetchResumes();
-  }, [user]);
+  }, [user]); // Only user as dependency since we're not using educationFilters or locations in the effect
 
   // Update the filter function to match keywords more accurately
   const filteredResumes = resumes.filter(resume => {

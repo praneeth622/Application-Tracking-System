@@ -10,7 +10,6 @@ import {
   FileText,
   User,
   Search,
-  BarChart2,
   Settings,
   LogOut,
   X,

@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/context/auth-context'
 import { db } from '@/FirebaseConfig'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { doc, getDoc, Timestamp } from 'firebase/firestore'
 import { DashboardSidebar } from '@/components/dashboard-sidebar'
 import { motion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -15,14 +14,36 @@ import { ArrowLeft } from 'lucide-react'
 import { ProfileAnalysis } from '@/components/profile/profile-analysis'
 import { CompanyFeedback } from '@/components/profile/company-feedback'
 
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!)
+
+interface Analysis {
+  name: string
+  email: string
+  key_skills: string[]
+  education_details: Array<{
+    degree: string
+    major: string
+    institute: string
+    graduation_year?: string
+    location?: string
+  }>
+  work_experience_details: Array<{
+    company: string
+    position: string
+    dates: string
+    responsibilities: string[]
+    location?: string
+  }>
+  experience_years?: number
+  profile_summary?: string
+}
 
 interface Profile {
-  filename: string;
-  filelink: string;
-  uploadedAt: any;
-  aiAnalysis?: string;
-  profile_summary?: string;
+  filename: string
+  filelink: string
+  uploadedAt: Timestamp
+  aiAnalysis?: string
+  analysis?: Analysis
+  profile_summary?: string
 }
 
 export default function ProfilePage() {
@@ -31,8 +52,7 @@ export default function ProfilePage() {
   const { user } = useAuth()
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [profile, setProfile] = useState<any>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [profile, setProfile] = useState<Profile | null>(null)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -45,11 +65,10 @@ export default function ProfilePage() {
         if (userDoc.exists()) {
           const userData = userDoc.data();
           const foundProfile = userData.resumes?.find(
-            (r: any) => r.filename === decodeURIComponent(params.filename as string)
+            (r: Profile) => r.filename === decodeURIComponent(params.filename as string)
           );
           
           if (foundProfile) {
-            // Transform the data to include both aiAnalysis and profile_summary
             const profileData: Profile = {
               ...foundProfile,
               profile_summary: foundProfile.analysis?.profile_summary || null,

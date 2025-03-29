@@ -15,11 +15,11 @@ export const useHiringStages = create<HiringStagesState>()(
   devtools(
     (set) => ({
       currentView: 'list',
-      setCurrentView: (view: any) => set({ currentView: view }),
+      setCurrentView: (view: 'list' | 'board') => set({ currentView: view }),
       statusFilter: 'all',
-      setStatusFilter: (status: any) => set({ statusFilter: status }),
+      setStatusFilter: (status: CandidateStatus | 'all') => set({ statusFilter: status }),
       searchQuery: '',
-      setSearchQuery: (query: any) => set({ searchQuery: query })
+      setSearchQuery: (query: string) => set({ searchQuery: query })
     }),
     {
       name: 'hiring-stages-store'

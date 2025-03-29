@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { ArrowRight, Mail, Shield, AlertCircle, CheckCircle, Upload } from "lucide-react"
+import { ArrowRight, Mail, Shield, Upload } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { auth } from "@/FirebaseConfig"
 import { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth"
+import { FirebaseError } from "firebase/app"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/context/auth-context"
 
@@ -43,7 +44,7 @@ export default function LoginPage() {
       setIsLoading(true)
       // Sign in with email link
       signInWithEmailLink(auth, savedEmail, window.location.href)
-        .then((result) => {
+        .then(() => {
           // Clear email from storage
           window.localStorage.removeItem('emailForSignIn')
           // Redirect to dashboard
@@ -86,10 +87,11 @@ export default function LoginPage() {
         title: "Check your email",
         description: "We've sent you a magic link to sign in.",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const firebaseError = error as FirebaseError
       toast({
         title: "Error",
-        description: error.message || "Something went wrong. Please try again.",
+        description: firebaseError.message || "Something went wrong. Please try again.",
         variant: "destructive"
       })
     } finally {
@@ -197,7 +199,7 @@ export default function LoginPage() {
                 </div>
                 <h2 className="text-xl font-semibold mb-2">Check Your Email</h2>
                 <p className="text-muted-foreground mb-6">
-                  We've sent a magic link to:<br />
+                  We&apos;ve sent a magic link to:<br />
                   <span className="font-medium text-foreground">{email}</span>
                 </p>
                 <button
@@ -218,7 +220,7 @@ export default function LoginPage() {
           </motion.div>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/register" className="text-primary hover:underline">
               Create one
             </Link>

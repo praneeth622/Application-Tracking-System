@@ -33,6 +33,37 @@ interface AnalysisSection {
   content: string[];
 }
 
+interface ResumeData {
+  filename: string;
+  filelink: string;
+  uploadedAt: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  aiAnalysis?: string;
+  analysis?: {
+    name: string;
+    email: string;
+    key_skills: string[];
+    education_details: Array<{
+      degree: string;
+      major: string;
+      institute: string;
+      graduation_year?: string;
+      location?: string;
+    }>;
+    work_experience_details: Array<{
+      company: string;
+      position: string;
+      dates: string;
+      responsibilities: string[];
+      location?: string;
+    }>;
+    experience_years?: number;
+    profile_summary?: string;
+  };
+}
+
 // Function to fetch profile summary from Firestore
 async function fetchProfileSummary(): Promise<Profile> {
   try {
@@ -120,7 +151,7 @@ export function ProfileAnalysis({ profile }: { profile: Profile }) {
       
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        const updatedResumes = userData.resumes.map((resume: any) => 
+        const updatedResumes = userData.resumes.map((resume: ResumeData) => 
           resume.filename === profile.filename 
             ? { ...resume, aiAnalysis: text }
             : resume

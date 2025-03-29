@@ -4,18 +4,23 @@ import { useState } from "react"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
-  User, 
+  User as UserIcon, 
   Settings, 
   FileText, 
   LogOut, 
   ChevronDown 
 } from "lucide-react"
+import type { User } from "firebase/auth"
 import { auth } from "@/FirebaseConfig"
 import { signOut } from "firebase/auth"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 
-export function UserDropdown({ user }: { user: any }) {
+interface UserDropdownProps {
+  user: User
+}
+
+export function UserDropdown({ user }: UserDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -28,10 +33,11 @@ export function UserDropdown({ user }: { user: any }) {
         variant: "default",
       })
       router.push('/login')
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "An error occurred while signing out"
       toast({
         title: "Error signing out",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -44,7 +50,7 @@ export function UserDropdown({ user }: { user: any }) {
         className="flex items-center space-x-2 hover:bg-muted rounded-lg p-2 transition-colors"
       >
         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-          <User className="w-5 h-5 text-primary" />
+          <UserIcon className="w-5 h-5 text-primary" />
         </div>
         <div className="hidden md:block text-left">
           <p className="text-sm font-medium">{user?.email}</p>

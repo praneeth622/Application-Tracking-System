@@ -2,8 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { FileText, MoreHorizontal, Download, Eye, Trash2, Clock, ExternalLink } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { FileText, MoreHorizontal, Download,  Trash2, Clock, ExternalLink } from "lucide-react"
 
 interface RecentFileCardProps {
   fileName: string
@@ -17,7 +16,6 @@ export function RecentFileCard({
   fileName,
   fileSize,
   uploadDate,
-  score,
   fileUrl
 }: RecentFileCardProps) {
   const [showActions, setShowActions] = useState(false)
