@@ -249,7 +249,7 @@ export default function JobPage() {
             </div>
 
             {/* Application Stats */}
-            <div className="border-t pt-4">
+            {/* <div className="border-t pt-4">
               <h3 className="text-lg font-semibold mb-3">Application Statistics</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-muted rounded-lg">
@@ -269,7 +269,7 @@ export default function JobPage() {
                   <p className="text-2xl text-red-700">{selectedJob.rejected}</p>
                 </div>
               </div>
-            </div>
+            </div> */}
 
             {/* Assignment and Candidates Buttons */}
             <div className="flex justify-end gap-4 border-t pt-4">
