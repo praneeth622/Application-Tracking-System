@@ -177,7 +177,6 @@ export default function CandidatesPage() {
 
       setIsLoading(true);
       setIsAnalyzing(true);
-      
 
       try {
         const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
@@ -186,8 +185,14 @@ export default function CandidatesPage() {
         if (storedProfilesDoc.exists()) {
           const data = storedProfilesDoc.data();
           if (data.candidates?.length > 0) {
-            console.log("Using stored relevant profiles");
-            setCandidates(data.candidates);
+            // Sort candidates by lastUpdated timestamp before setting state
+            const sortedCandidates = data.candidates.sort((a: Candidate, b: Candidate) => {
+              const dateA = a.tracking?.lastUpdated ? new Date(a.tracking.lastUpdated).getTime() : 0;
+              const dateB = b.tracking?.lastUpdated ? new Date(b.tracking.lastUpdated).getTime() : 0;
+              return dateB - dateA;
+            });
+            
+            setCandidates(sortedCandidates);
             setIsAnalyzing(false);
             setIsLoading(false);
             return;
@@ -280,29 +285,30 @@ export default function CandidatesPage() {
     analyzeCandidates();
   }, [jobId, user]);
 
-  useEffect(() => {
-    const loadStoredResults = async () => {
-      if (!jobId) return
+  // Remove or comment out the second useEffect that loads stored results as it's redundant
+  // useEffect(() => {
+  //   const loadStoredResults = async () => {
+  //     if (!jobId) return
 
-      try {
-        const jobResumesRef = doc(db, "jobs", jobId, "resumes", "details")
-        const jobResumesDoc = await getDoc(jobResumesRef)
+  //     try {
+  //       const jobResumesRef = doc(db, "jobs", jobId, "resumes", "details")
+  //       const jobResumesDoc = await getDoc(jobResumesRef)
 
-        if (jobResumesDoc.exists()) {
-          const data = jobResumesDoc.data()
-          if (data.relevant_candidates?.length > 0) {
-            setCandidates(data.relevant_candidates)
-            setIsAnalyzing(false)
-            setIsLoading(false)
-          }
-        }
-      } catch (error) {
-        console.error("Error loading stored results:", error)
-      }
-    }
+  //       if (jobResumesDoc.exists()) {
+  //         const data = jobResumesDoc.data()
+  //         if (data.relevant_candidates?.length > 0) {
+  //           setCandidates(data.relevant_candidates)
+  //           setIsAnalyzing(false)
+  //           setIsLoading(false)
+  //         }
+  //       }
+  //     } catch (error) {
+  //       console.error("Error loading stored results:", error)
+  //     }
+  //   }
 
-    loadStoredResults()
-  }, [jobId])
+  //   loadStoredResults()
+  // }, [jobId])
 
   const refreshCandidates = async () => {
     try {
