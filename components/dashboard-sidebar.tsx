@@ -19,6 +19,7 @@ import {
   HelpCircle,
   ChevronLeft,
   ArrowRightToLine,
+  Building, // Add this import for vendor icon
 } from "lucide-react"
 import { useMobile } from "@/hooks/use-mobile"
 
@@ -91,6 +92,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
     { id: "profiles", label: "My Profiles", icon: <User className="w-5 h-5" />, href: "/profiles" },
     { id: "keywords", label: "Keyword Matcher", icon: <Search className="w-5 h-5" />, href: "/keyword-matcher" },
     { id: "jobs", label: "Job Management", icon: <Briefcase className="w-5 h-5" />, href: "/job" },
+    { id: "vendors", label: "Vendor Management", icon: <Building className="w-5 h-5" />, href: "/vendor" },
   ]
 
   const secondaryNavItems = [

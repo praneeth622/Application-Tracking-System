@@ -35,8 +35,7 @@ export default function LoginPage() {
         toast({
           title: "Error",
           description: "Could not find your email. Please try signing in again.",
-          variant: "destructive",
-          icon: <AlertCircle className="w-4 h-4" />
+          variant: "destructive"
         })
         return
       }
@@ -51,16 +50,14 @@ export default function LoginPage() {
           router.push('/upload-resume')
           toast({
             title: "Success",
-            description: "You have been successfully signed in!",
-            icon: <CheckCircle className="w-4 h-4 text-green-500" />
+            description: "You have been successfully signed in!"
           })
         })
         .catch((error) => {
           toast({
             title: "Error",
             description: error.message || "Failed to sign in. Please try again.",
-            variant: "destructive",
-            icon: <AlertCircle className="w-4 h-4" />
+            variant: "destructive"
           })
         })
         .finally(() => {
@@ -88,14 +85,12 @@ export default function LoginPage() {
       toast({
         title: "Check your email",
         description: "We've sent you a magic link to sign in.",
-        icon: <CheckCircle className="w-4 h-4 text-green-500" />
       })
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message || "Something went wrong. Please try again.",
-        variant: "destructive",
-        icon: <AlertCircle className="w-4 h-4" />
+        variant: "destructive"
       })
     } finally {
       setIsLoading(false)
