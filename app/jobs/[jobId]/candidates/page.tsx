@@ -17,14 +17,8 @@ import { CandidateActions } from "@/components/candidate-actions"
 import { format } from "date-fns"
 import { HiringStagesBoard } from "@/components/hiring-stages-board"
 import { useHiringStages } from "@/store/hiring-stages"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { CandidateDetailsSheet } from "@/components/candidate-details-sheet"
 
 interface MatchAnalysis {
   matchPercentage: number
@@ -129,7 +123,7 @@ export default function CandidatesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const { user } = useAuth()
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
 
   const fetchResumes = async () => {
     try {
@@ -285,31 +279,6 @@ export default function CandidatesPage() {
     analyzeCandidates();
   }, [jobId, user]);
 
-  // Remove or comment out the second useEffect that loads stored results as it's redundant
-  // useEffect(() => {
-  //   const loadStoredResults = async () => {
-  //     if (!jobId) return
-
-  //     try {
-  //       const jobResumesRef = doc(db, "jobs", jobId, "resumes", "details")
-  //       const jobResumesDoc = await getDoc(jobResumesRef)
-
-  //       if (jobResumesDoc.exists()) {
-  //         const data = jobResumesDoc.data()
-  //         if (data.relevant_candidates?.length > 0) {
-  //           setCandidates(data.relevant_candidates)
-  //           setIsAnalyzing(false)
-  //           setIsLoading(false)
-  //         }
-  //       }
-  //     } catch (error) {
-  //       console.error("Error loading stored results:", error)
-  //     }
-  //   }
-
-  //   loadStoredResults()
-  // }, [jobId])
-
   const refreshCandidates = async () => {
     try {
       const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
@@ -361,7 +330,6 @@ export default function CandidatesPage() {
     currentView, 
     setCurrentView,
     statusFilter,
-    setStatusFilter,
     searchQuery,
     setSearchQuery
   } = useHiringStages()
@@ -396,18 +364,6 @@ export default function CandidatesPage() {
     return () => unsubscribe();
   }, [jobId, statusFilter]);
 
-  const handleStatusFilterChange = async (newStatus: CandidateStatus | 'all') => {
-    setStatusFilter(newStatus);
-    setIsLoading(true);
-    try {
-      const filteredCandidates = await fetchCandidatesByStatus(newStatus);
-      setCandidates(filteredCandidates);
-    } catch  {
-      toast.error("Failed to filter candidates");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
@@ -457,26 +413,7 @@ export default function CandidatesPage() {
               </Button>
             </div>
 
-            <div className="flex-1 flex items-center gap-4">
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => handleStatusFilterChange(value as CandidateStatus | 'all')}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Candidates</SelectItem>
-                  <SelectItem value="shortlisted">Shortlisted</SelectItem>
-                  <SelectItem value="contacted">Contacted</SelectItem>
-                  <SelectItem value="interested">Interested</SelectItem>
-                  <SelectItem value="rate_confirmed">Rate Confirmed</SelectItem>
-                  <SelectItem value="interview_scheduled">Interview Scheduled</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="disapproved">Disapproved</SelectItem>
-                </SelectContent>
-              </Select>
-
+            <div className="flex-1">
               <Input
                 placeholder="Search candidates..."
                 value={searchQuery}
@@ -514,7 +451,8 @@ export default function CandidatesPage() {
                   .map((candidate) => (
                     <div
                       key={candidate.filename}
-                      className="p-6 rounded-lg border hover:border-primary transition-all"
+                      className="p-6 rounded-lg border hover:border-primary transition-all cursor-pointer"
+                      onClick={() => setSelectedCandidate(candidate)}
                     >
                       <div className="flex justify-between items-start">
                         <div className="space-y-4">
@@ -572,14 +510,14 @@ export default function CandidatesPage() {
                           </div>
                         </div>
                       </div>
-                      
+{/*                       
                       <div className="mt-4 pt-4 border-t">
                         <CandidateActions 
                           candidate={candidate} 
                           jobId={jobId}
                           onUpdate={refreshCandidates} 
                         />
-                      </div>
+                      </div> */}
                       
                       {candidate.tracking && (
                         <div className="mt-4 text-sm text-muted-foreground">
@@ -604,6 +542,14 @@ export default function CandidatesPage() {
               />
             )
           )}
+
+          <CandidateDetailsSheet
+            candidate={selectedCandidate}
+            jobId={jobId}
+            isOpen={!!selectedCandidate}
+            onClose={() => setSelectedCandidate(null)}
+            onUpdate={refreshCandidates}
+          />
         </div>
       </motion.div>
     </div>
