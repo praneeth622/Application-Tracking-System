@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Upload, FileText, X, FileUp } from "lucide-react"
 import { storage } from "@/FirebaseConfig"
@@ -9,6 +9,9 @@ import { useAuth } from "@/context/auth-context"
 import { generateUUID } from "@/utils/generate-id"
 import { useToast } from "@/hooks/use-toast"
 import { analyzeResume } from "@/utils/analyze-resume"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { collection, getDocs, doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { db } from "@/FirebaseConfig"
 
 // Add this type definition at the top of the file
 type AnalysisResult = {
@@ -49,12 +52,20 @@ type AnalysisResult = {
     description: string[];
   }>;
   profile_summary: string | null;
+  vendor_id?: string;
+  vendor_name?: string;
 };
 
 // Add this interface near the top of the file with other type definitions
 interface FirebaseError {
   code: string;
   message: string;
+  name: string;
+}
+
+// Add this interface
+interface Vendor {
+  id: string;
   name: string;
 }
 
@@ -70,6 +81,29 @@ export function DragDropUpload() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+
+  // Add these new states
+  const [vendors, setVendors] = useState<Vendor[]>([])
+  const [selectedVendor, setSelectedVendor] = useState<string>("no-vendor")
+
+  // Add this useEffect to fetch vendors
+  useEffect(() => {
+    const fetchVendors = async () => {
+      try {
+        const vendorsCollection = collection(db, "vendors");
+        const vendorsSnapshot = await getDocs(vendorsCollection);
+        const vendorsList = vendorsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name
+        }));
+        setVendors(vendorsList);
+      } catch (error) {
+        console.error("Error fetching vendors:", error);
+      }
+    };
+
+    fetchVendors();
+  }, []);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
@@ -156,20 +190,31 @@ export function DragDropUpload() {
         async () => {
           try {
             setIsAnalyzing(true);
-            toast({
-              title: "Upload successful",
-              description: "Now analyzing your resume...",
-            });
             
+            // Add vendor information to the analysis
             const analysisResult = await analyzeResume(file, user.uid, user.email!);
             
-            setAnalysisResult(analysisResult.analysis);
+            // Update the analysis with vendor information
+            const updatedAnalysis = {
+              ...analysisResult.analysis,
+              vendor_id: selectedVendor === "no-vendor" ? null : selectedVendor,
+              vendor_name: selectedVendor === "no-vendor" ? null : vendors.find(v => v.id === selectedVendor)?.name
+            };
+
+            setAnalysisResult(updatedAnalysis);
             setUploadStatus("success");
             
+            // Store vendor information in Firebase
+            const resumeRef = doc(db, "resumes", resumeId);
+            await setDoc(resumeRef, {
+              ...analysisResult,
+              vendor_id: selectedVendor || null,
+              uploaded_at: serverTimestamp()
+            });
+
             toast({
-              title: "Analysis Complete",
-              description: "Your resume has been analyzed successfully",
-              variant: "default",
+              title: "Success",
+              description: "Resume analyzed and vendor tagged successfully",
             });
           } catch (error: unknown) {
             const firebaseError = error as FirebaseError;
@@ -195,7 +240,6 @@ export function DragDropUpload() {
       });
     }
   }
-
 
   const resetUpload = () => {
     setFile(null)
@@ -247,6 +291,23 @@ export function DragDropUpload() {
                 Upload your resume in PDF or DOCX format. We&apos;ll analyze it against ATS systems and provide detailed
                 feedback.
               </p>
+
+              <div className="mb-4">
+                <label className="text-sm font-medium mb-2 block">Select Vendor (Optional)</label>
+                <Select value={selectedVendor} onValueChange={setSelectedVendor}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a vendor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no-vendor">No Vendor</SelectItem>
+                    {vendors.map((vendor) => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="flex items-center justify-center">
                 <div className="relative">
