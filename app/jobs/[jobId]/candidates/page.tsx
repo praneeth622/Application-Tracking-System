@@ -13,7 +13,6 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
 import { analyzeBatchMatches } from "@/utils/analyze-match"
 import { toast } from "sonner"
-import { CandidateActions } from "@/components/candidate-actions"
 import { format } from "date-fns"
 import { HiringStagesBoard } from "@/components/hiring-stages-board"
 import { useHiringStages } from "@/store/hiring-stages"
@@ -296,35 +295,6 @@ export default function CandidatesPage() {
     }
   };
 
-  const fetchCandidatesByStatus = async (status: CandidateStatus | 'all') => {
-    try {
-      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
-      const profilesDoc = await getDoc(relevantProfilesRef);
-
-      if (!profilesDoc.exists()) {
-        return [];
-      }
-
-      const data = profilesDoc.data();
-      let filteredCandidates = data.candidates || [];
-
-      if (status !== 'all') {
-        filteredCandidates = filteredCandidates.filter(
-          (candidate: Candidate) => candidate.tracking?.status === status
-        );
-      }
-
-      return filteredCandidates.sort((a: Candidate, b: Candidate) => {
-        const dateA = a.tracking?.lastUpdated ? new Date(a.tracking.lastUpdated).getTime() : 0;
-        const dateB = b.tracking?.lastUpdated ? new Date(b.tracking.lastUpdated).getTime() : 0;
-        return dateB - dateA;
-      });
-
-    } catch (error) {
-      console.error("Error fetching candidates:", error);
-      throw new Error("Failed to fetch candidates");
-    }
-  };
 
   const { 
     currentView, 
