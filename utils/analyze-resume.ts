@@ -29,7 +29,7 @@ export async function analyzeResume(file: File, userId: string, userEmail: strin
     - Project experience
     - Profile summary (Give a brief analysis of the candidate's profile)
 
-    Ensure the output is in valid JSON format with no additional formatting, markdown, or code block syntax. The JSON should be well-structured, accurate, and free from unnecessary nesting or subsections beyond what is specified.`;
+    Ensure the output is in valid JSON format with no additional formatting, markdown, or code block syntax.`;
 
     const result = await model.generateContent({
       contents: [
@@ -45,13 +45,12 @@ export async function analyzeResume(file: File, userId: string, userEmail: strin
 
     const response = await result.response;
     const responseText = await response.text();
-    console.log("AI Model Response:", responseText);
-
+    
     // Clean the response text by removing markdown code block syntax
     const cleanResponse = responseText
-      .replace(/```json\n?/, '')  // Remove opening code block
-      .replace(/```\n?$/, '')     // Remove closing code block
-      .trim();                    // Remove extra whitespace
+      .replace(/```json\n?/, '')
+      .replace(/```\n?$/, '')
+      .trim();
 
     let analysisJson;
     try {

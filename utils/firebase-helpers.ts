@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 export interface ResumeData {
   filename: string;
   filelink: string;
+  fileHash: string;
   analysis: any;
   uploadedAt: Date;
 }
@@ -23,6 +24,18 @@ export async function saveResumeToFirebase(
   userEmail: string
 ): Promise<ResumeData> {
   try {
+    // Generate file hash
+    const fileBuffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // Check for duplicates
+    const isDuplicate = await checkDuplicateResume(userId, fileHash);
+    if (isDuplicate) {
+      throw new Error('This resume has already been uploaded');
+    }
+
     // Generate unique filename
     const uniqueFilename = `${uuidv4()}_${file.name}`;
     
@@ -35,6 +48,7 @@ export async function saveResumeToFirebase(
     const resumeData: ResumeData = {
       filename: uniqueFilename,
       filelink,
+      fileHash,
       analysis,
       uploadedAt: new Date(),
     };
@@ -69,4 +83,36 @@ export async function saveResumeToFirebase(
     console.error("Error in saveResumeToFirebase:", error);
     throw error;
   }
+}
+
+export async function checkDuplicateResume(
+  userId: string,
+  fileHash: string
+): Promise<boolean> {
+  const userResumesRef = doc(db, "users", userId, "resumes", "data");
+  const docSnap = await getDoc(userResumesRef);
+  
+  if (docSnap.exists()) {
+    const data = docSnap.data();
+    return data.resumes?.some((resume: ResumeData) => 
+      resume.fileHash === fileHash
+    ) || false;
+  }
+  
+  return false;
+}
+
+async function generateFileHash(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const arrayBuffer = event.target?.result as ArrayBuffer;
+      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      resolve(hashHex);
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
 }
