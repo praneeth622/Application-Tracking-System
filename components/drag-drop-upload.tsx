@@ -2,9 +2,9 @@
 
 import { useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Upload, FileText, CheckCircle, AlertCircle, X, FileUp } from "lucide-react"
+import { Upload, FileText, X, FileUp } from "lucide-react"
 import { storage } from "@/FirebaseConfig"
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"
+import { ref, uploadBytesResumable } from "firebase/storage"
 import { useAuth } from "@/context/auth-context"
 import { generateUUID } from "@/utils/generate-id"
 import { useToast } from "@/hooks/use-toast"
@@ -12,7 +12,7 @@ import { analyzeResume } from "@/utils/analyze-resume"
 
 // Add this type definition at the top of the file
 type AnalysisResult = {
-  skills: any
+  skills: string[];  // Changed from 'any' to string array
   name: string;
   phone_number: string;
   email: string;
@@ -63,7 +63,6 @@ export function DragDropUpload() {
   const [file, setFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "success" | "error">("idle")
-  const [fileUrl, setFileUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuth()
   const { toast } = useToast()
@@ -202,7 +201,6 @@ export function DragDropUpload() {
     setFile(null)
     setUploadProgress(0)
     setUploadStatus("idle")
-    setFileUrl(null)
     setAnalysisResult(null)
     setAnalysisError(null)
     setIsAnalyzing(false)
