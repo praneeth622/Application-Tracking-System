@@ -8,6 +8,8 @@ export interface ResumeData {
   filelink: string;
   fileHash: string;
   analysis: any;
+  vendor_id: string | null;
+  vendor_name: string | null;
   uploadedAt: Date;
 }
 
@@ -21,7 +23,9 @@ export async function saveResumeToFirebase(
   file: File, 
   analysis: any, 
   userId: string, 
-  userEmail: string
+  userEmail: string,
+  vendor_id: string | null = null,
+  vendor_name: string | null = null
 ): Promise<ResumeData> {
   try {
     // Generate file hash
@@ -44,12 +48,14 @@ export async function saveResumeToFirebase(
     await uploadBytes(storageRef, file);
     const filelink = await getDownloadURL(storageRef);
 
-    // Prepare resume data
+    // Prepare resume data with simple vendor reference
     const resumeData: ResumeData = {
       filename: uniqueFilename,
       filelink,
       fileHash,
       analysis,
+      vendor_id,
+      vendor_name,
       uploadedAt: new Date(),
     };
 
