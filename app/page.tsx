@@ -61,72 +61,29 @@ const DynamicTestimonials = dynamic(() => import('@/components/testimonials'), {
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [activeFeature, setActiveFeature] = useState(0)
-  const [activeTestimonial, setActiveTestimonial] = useState(0)
   const [scrollY, setScrollY] = useState(0)
-  const [scrollProgress, setScrollProgress] = useState(0)
-  const [isVisible, setIsVisible] = useState(false)
   const sectionRef = useRef(null)
 
   const { user } = useAuth()
 
-  // Add loading states and feedback
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState('');
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    try {
-      // API call
-      setFeedback('Success!');
-    } catch (error) {
-      setFeedback('An error occurred');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Parallax effect
+  // Update scroll handler to remove unused scrollProgress
   useEffect(() => {
     const handleScroll = () => {
       setScrollY(window.scrollY)
-
-      const totalScroll = document.documentElement.scrollHeight - window.innerHeight
-      const currentProgress = (window.pageYOffset / totalScroll) * 100
-      setScrollProgress(currentProgress)
     }
 
     window.addEventListener("scroll", handleScroll, { passive: true })
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  // Smooth scroll behavior
-  const scrollToSection = (id: string) => {
-    const element = document.getElementById(id)
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      })
-    }
-  }
-
-  // Add keyboard navigation
-  const handleKeyPress = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setIsMenuOpen(false);
-    }
-  };
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleKeyPress);
-    return () => window.removeEventListener("keydown", handleKeyPress);
-  }, []);
-
-  // Intersection observer for better performance
+  // Update intersection observer to use the value
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setIsVisible(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          // Do something when section is visible, for example:
+          // Trigger animations or load content
+        }
       },
       { threshold: 0.1 }
     );
@@ -136,7 +93,7 @@ export default function LandingPage() {
     }
 
     return () => observer.disconnect();
-  }, []);
+  }, [])
 
   // Animation controls
   const heroControls = useAnimation()
@@ -161,14 +118,6 @@ export default function LandingPage() {
     const interval = setInterval(() => {
       setActiveFeature((prev) => (prev + 1) % 3)
     }, 5000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Auto-rotate testimonials
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveTestimonial((prev) => (prev + 1) % 3)
-    }, 7000)
     return () => clearInterval(interval)
   }, [])
 
@@ -219,32 +168,6 @@ export default function LandingPage() {
     },
   ]
 
-  const testimonials = [
-    {
-      name: "Sarah Johnson",
-      role: "Head of Talent Acquisition",
-      company: "TechHire Solutions",
-      content:
-        "TalentSync has revolutionized our recruitment process. We've reduced time-to-hire by 60% and improved candidate quality significantly. Our team can now focus on strategic initiatives rather than administrative tasks.",
-      rating: 5,
-    },
-    {
-      name: "Michael Chen",
-      role: "HR Director",
-      company: "Global Staffing Inc",
-      content:
-        "The AI matching capabilities have transformed how we handle high-volume recruiting. We're now able to process 3x more applications with the same team size, and our quality of hire metrics have improved by 45%.",
-      rating: 5,
-    },
-    {
-      name: "Jessica Williams",
-      role: "Recruitment Manager",
-      company: "Innovate Recruiting",
-      content:
-        "The analytics dashboard gives us unprecedented visibility into our recruitment funnel. We've identified bottlenecks we didn't even know existed and optimized our process to reduce cost-per-hire by 35%.",
-      rating: 5,
-    },
-  ]
 
   const stats = [
     {
@@ -296,6 +219,13 @@ export default function LandingPage() {
         ease: "easeOut",
       },
     },
+  }
+
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   return (
