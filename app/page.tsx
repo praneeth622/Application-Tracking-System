@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import { motion, useAnimation } from "framer-motion"
 import { useInView } from "react-intersection-observer"
 import {
@@ -33,23 +34,109 @@ import { UserDropdown } from "@/components/user-dropdown"
 import { auth } from "@/FirebaseConfig"
 import { signOut } from "firebase/auth"
 
+const TestimonialsLoader = () => (
+  <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+    {[...Array(3)].map((_, index) => (
+      <div key={index} className="p-6 bg-card rounded-lg shadow-lg animate-pulse">
+        <div className="flex items-center mb-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="w-5 h-5 bg-gray-200 rounded-full mr-1" />
+          ))}
+        </div>
+        <div className="h-24 bg-gray-200 rounded mb-4" />
+        <div className="space-y-2">
+          <div className="h-4 bg-gray-200 rounded w-1/2" />
+          <div className="h-3 bg-gray-200 rounded w-3/4" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const DynamicTestimonials = dynamic(() => import('@/components/testimonials'), {
+  loading: () => <TestimonialsLoader />,
+  ssr: false
+});
+
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [activeFeature, setActiveFeature] = useState(0)
   const [activeTestimonial, setActiveTestimonial] = useState(0)
   const [scrollY, setScrollY] = useState(0)
+  const [scrollProgress, setScrollProgress] = useState(0)
+  const [isVisible, setIsVisible] = useState(false)
+  const sectionRef = useRef(null)
 
   const { user } = useAuth()
+
+  // Add loading states and feedback
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      // API call
+      setFeedback('Success!');
+    } catch (error) {
+      setFeedback('An error occurred');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Parallax effect
   useEffect(() => {
     const handleScroll = () => {
       setScrollY(window.scrollY)
+
+      const totalScroll = document.documentElement.scrollHeight - window.innerHeight
+      const currentProgress = (window.pageYOffset / totalScroll) * 100
+      setScrollProgress(currentProgress)
     }
 
     window.addEventListener("scroll", handleScroll, { passive: true })
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
+
+  // Smooth scroll behavior
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id)
+    if (element) {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    }
+  }
+
+  // Add keyboard navigation
+  const handleKeyPress = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setIsMenuOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, []);
+
+  // Intersection observer for better performance
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+      },
+      { threshold: 0.1 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Animation controls
   const heroControls = useAnimation()
@@ -241,13 +328,18 @@ export default function LandingPage() {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8">
-              <Link href="#features" className="text-foreground hover:text-primary transition-colors relative group">
+              <Link
+                href="#features"
+                className="text-foreground hover:text-primary transition-colors relative group"
+                onClick={() => scrollToSection("features")}
+              >
                 Features
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all duration-300 group-hover:w-full"></span>
               </Link>
               <Link
                 href="#how-it-works"
                 className="text-foreground hover:text-primary transition-colors relative group"
+                onClick={() => scrollToSection("how-it-works")}
               >
                 How It Works
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all duration-300 group-hover:w-full"></span>
@@ -255,11 +347,16 @@ export default function LandingPage() {
               <Link
                 href="#testimonials"
                 className="text-foreground hover:text-primary transition-colors relative group"
+                onClick={() => scrollToSection("testimonials")}
               >
                 Success Stories
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all duration-300 group-hover:w-full"></span>
               </Link>
-              <Link href="#pricing" className="text-foreground hover:text-primary transition-colors relative group">
+              <Link
+                href="#pricing"
+                className="text-foreground hover:text-primary transition-colors relative group"
+                onClick={() => scrollToSection("pricing")}
+              >
                 Pricing
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all duration-300 group-hover:w-full"></span>
               </Link>
@@ -268,7 +365,6 @@ export default function LandingPage() {
             <div className="hidden md:flex items-center space-x-4">
               {user ? (
                 <>
-                  
                   <UserDropdown user={user} />
                 </>
               ) : (
@@ -285,7 +381,12 @@ export default function LandingPage() {
             </div>
 
             {/* Mobile menu button */}
-            <button className="md:hidden text-foreground" onClick={() => setIsMenuOpen(true)}>
+            <button 
+              aria-label="Open mobile menu"
+              role="button"
+              className="md:hidden text-foreground" 
+              onClick={() => setIsMenuOpen(true)}
+            >
               <Menu className="w-6 h-6" />
             </button>
           </div>
@@ -322,7 +423,10 @@ export default function LandingPage() {
               <Link
                 href="#features"
                 className="text-foreground text-lg flex items-center"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  scrollToSection("features")
+                }}
               >
                 <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
                   <Sparkles className="w-4 h-4 text-primary" />
@@ -335,7 +439,10 @@ export default function LandingPage() {
               <Link
                 href="#how-it-works"
                 className="text-foreground text-lg flex items-center"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  scrollToSection("how-it-works")
+                }}
               >
                 <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
                   <Zap className="w-4 h-4 text-primary" />
@@ -348,7 +455,10 @@ export default function LandingPage() {
               <Link
                 href="#testimonials"
                 className="text-foreground text-lg flex items-center"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  scrollToSection("testimonials")
+                }}
               >
                 <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
                   <Star className="w-4 h-4 text-primary" />
@@ -361,7 +471,10 @@ export default function LandingPage() {
               <Link
                 href="#pricing"
                 className="text-foreground text-lg flex items-center"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  scrollToSection("pricing")
+                }}
               >
                 <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
                   <Award className="w-4 h-4 text-primary" />
@@ -442,7 +555,7 @@ export default function LandingPage() {
                   Schedule a Demo
                   <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
                 </Link>
-                <Link href="#how-it-works" className="btn-secondary">
+                <Link href="#how-it-works" className="btn-secondary" onClick={() => scrollToSection("how-it-works")}>
                   See How It Works
                 </Link>
               </div>
@@ -609,9 +722,7 @@ export default function LandingPage() {
               <Sparkles className="w-4 h-4 mr-2" />
               Powerful Features
             </div>
-            <h2 className="section-title">
-              Recruitment Tools That Drive Results
-            </h2>
+            <h2 className="section-title">Recruitment Tools That Drive Results</h2>
             <p className="section-description">
               Our platform offers everything you need to streamline your recruitment process and make better hiring
               decisions.
@@ -723,9 +834,7 @@ export default function LandingPage() {
               <Zap className="w-4 h-4 mr-2" />
               Simple Process
             </div>
-            <h2 className="section-title">
-              How It Works
-            </h2>
+            <h2 className="section-title">How It Works</h2>
             <p className="section-description">Streamline your recruitment workflow in three simple steps</p>
           </div>
 
@@ -797,126 +906,14 @@ export default function LandingPage() {
               <Star className="w-4 h-4 mr-2" />
               Success Stories
             </div>
-            <h2 className="section-title">
-              What Our Clients Say
-            </h2>
+            <h2 className="section-title">What Our Clients Say</h2>
             <p className="section-description">
               Join hundreds of recruitment teams who have transformed their hiring process with our platform.
             </p>
           </div>
 
           <motion.div variants={sectionVariants} initial="hidden" animate={testimonialsControls} className="relative">
-            <div className="glass-card overflow-hidden">
-              <div className="grid md:grid-cols-2 gap-8 items-center">
-                <div className="p-8 md:p-12">
-                  <div className="flex mb-6">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="w-5 h-5 fill-primary text-primary mr-1" />
-                    ))}
-                  </div>
-
-                  <div className="relative">
-                    {testimonials.map((testimonial, index) => (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{
-                          opacity: index === activeTestimonial ? 1 : 0,
-                          x: index === activeTestimonial ? 0 : 20,
-                          position: index === activeTestimonial ? "relative" : "absolute",
-                          zIndex: index === activeTestimonial ? 10 : 0,
-                          top: 0,
-                        }}
-                        transition={{ duration: 0.5 }}
-                        className="w-full"
-                      >
-                        <blockquote className="text-xl italic mb-6">&quot;{testimonial.content}&quot;</blockquote>
-
-                        <div>
-                          <h4 className="font-semibold text-lg">{testimonial.name}</h4>
-                          <p className="text-muted-foreground">
-                            {testimonial.role}, {testimonial.company}
-                          </p>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-
-                  <div className="flex mt-8 space-x-2">
-                    {testimonials.map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setActiveTestimonial(index)}
-                        className={`w-3 h-3 rounded-full transition-colors ${
-                          index === activeTestimonial ? "bg-primary" : "bg-border"
-                        }`}
-                        aria-label={`View testimonial ${index + 1}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="relative h-full min-h-[400px] bg-gradient-to-br from-primary/5 to-secondary/5 rounded-l-3xl overflow-hidden hidden md:block">
-                  <div className="absolute inset-0 dot-pattern opacity-10"></div>
-
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[120%] max-w-md">
-                    <div className="relative">
-                      {testimonials.map((_testimonial, index) => (
-                        <motion.div
-                          key={index}
-                          initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                          animate={{
-                            opacity: index === activeTestimonial ? 1 : 0,
-                            scale: index === activeTestimonial ? 1 : 0.9,
-                            y: index === activeTestimonial ? 0 : 20,
-                            position: index === activeTestimonial ? "relative" : "absolute",
-                            zIndex: index === activeTestimonial ? 10 : 0,
-                            top: 0,
-                            left: 0,
-                            width: "100%",
-                          }}
-                          transition={{ duration: 0.5 }}
-                        >
-                          <div className="bg-background/80 backdrop-blur-md rounded-xl p-6 shadow-lg border border-primary/10">
-                            <div className="flex justify-between items-center mb-4">
-                              <div className="flex items-center">
-                                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center mr-3">
-                                  <BarChart2 className="w-5 h-5 text-primary" />
-                                </div>
-                                <span className="font-medium">Recruitment Metrics</span>
-                              </div>
-                              <div className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                                Client Results
-                              </div>
-                            </div>
-
-                            <div className="space-y-3 mb-4">
-                              <div className="flex items-start">
-                                <CheckCircle className="w-4 h-4 text-accent mt-0.5 mr-2 flex-shrink-0" />
-                                <p className="text-sm">60% reduction in time-to-hire</p>
-                              </div>
-                              <div className="flex items-start">
-                                <CheckCircle className="w-4 h-4 text-accent mt-0.5 mr-2 flex-shrink-0" />
-                                <p className="text-sm">45% improvement in quality of hire</p>
-                              </div>
-                              <div className="flex items-start">
-                                <CheckCircle className="w-4 h-4 text-accent mt-0.5 mr-2 flex-shrink-0" />
-                                <p className="text-sm">40% reduction in cost-per-hire</p>
-                              </div>
-                            </div>
-
-                            <div className="text-sm text-muted-foreground">
-                              Result:{" "}
-                              <span className="text-foreground font-medium">3x more placements per recruiter</span>
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <DynamicTestimonials />
           </motion.div>
         </div>
       </section>
@@ -929,9 +926,7 @@ export default function LandingPage() {
               <Award className="w-4 h-4 mr-2" />
               Pricing Plans
             </div>
-            <h2 className="section-title">
-              Simple, Transparent, Pricing
-            </h2>
+            <h2 className="section-title">Simple, Transparent, Pricing</h2>
             <p className="section-description">Choose the plan that works best for your recruitment team.</p>
           </div>
 

@@ -5,70 +5,70 @@
 
 @layer base {
   :root {
-    /* Premium Yellow and White Color Palette */
-    --primary: 45 100% 50%; /* Rich Yellow */
-    --primary-foreground: 0 0% 10%;
+    /* Updated Blue and White Color Palette */
+    --primary: 220 90% 56%; /* Bright Blue */
+    --primary-foreground: 0 0% 100%; /* Pure White */
 
-    --secondary: 40 100% 60%; /* Gold */
-    --secondary-foreground: 0 0% 10%;
+    --secondary: 220 80% 50%; /* Slightly Muted Blue */
+    --secondary-foreground: 0 0% 100%; /* Pure White */
 
-    --accent: 35 90% 45%; /* Amber */
-    --accent-foreground: 0 0% 100%;
+    --accent: 220 70% 45%; /* Darker Blue */
+    --accent-foreground: 0 0% 100%; /* Pure White */
 
-    --background: 0 0% 100%; /* Pure White */
-    --foreground: 0 0% 3.9%; /* Near Black */
+    --background: 220 30% 10%; /* Dark Blue Background */
+    --foreground: 0 0% 100%; /* Pure White Text */
 
-    --muted: 45 30% 96%; /* Light Yellow-tinted Gray */
-    --muted-foreground: 0 0% 40%;
+    --muted: 220 20% 20%; /* Muted Blue */
+    --muted-foreground: 0 0% 80%; /* Light Gray Text */
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    
-    --input: 0 0% 89.8%;
-    --border: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --card: 220 25% 15%; /* Slightly Lighter Blue */
+    --card-foreground: 0 0% 100%; /* Pure White */
+
+    --popover: 220 25% 15%; /* Same as Card */
+    --popover-foreground: 0 0% 100%; /* Pure White */
+
+    --input: 220 20% 25%; /* Muted Input Background */
+    --border: 220 20% 25%; /* Muted Border */
+    --ring: 220 90% 56%; /* Bright Blue Ring */
+
+    --destructive: 0 84.2% 60.2%; /* Red for Destructive Actions */
+    --destructive-foreground: 0 0% 100%; /* Pure White */
 
     --radius: 0.75rem;
 
     /* Chart colors */
-    --chart-1: 45 100% 50%;
-    --chart-2: 40 100% 60%;
-    --chart-3: 35 90% 45%;
-    --chart-4: 30 85% 50%;
-    --chart-5: 25 80% 55%;
+    --chart-1: 220 90% 56%;
+    --chart-2: 220 80% 50%;
+    --chart-3: 220 70% 45%;
+    --chart-4: 220 60% 40%;
+    --chart-5: 220 50% 35%;
   }
 
   .dark {
-    --background: 0 0% 10%;
-    --foreground: 45 100% 96%;
+    --background: 220 30% 10%; /* Dark Blue Background */
+    --foreground: 0 0% 100%; /* Pure White Text */
 
-    --muted: 45 15% 20%;
-    --muted-foreground: 45 10% 70%;
+    --muted: 220 20% 20%; /* Muted Blue */
+    --muted-foreground: 0 0% 80%; /* Light Gray Text */
 
-    --card: 0 0% 10%;
-    --card-foreground: 45 100% 96%;
-    
-    --popover: 0 0% 10%;
-    --popover-foreground: 45 100% 96%;
-    
-    --input: 45 15% 25%;
-    --border: 45 15% 25%;
-    
-    --destructive: 0 100% 50%;
-    --destructive-foreground: 0 0% 100%;
+    --card: 220 25% 15%; /* Slightly Lighter Blue */
+    --card-foreground: 0 0% 100%; /* Pure White */
+
+    --popover: 220 25% 15%; /* Same as Card */
+    --popover-foreground: 0 0% 100%; /* Pure White */
+
+    --input: 220 20% 25%; /* Muted Input Background */
+    --border: 220 20% 25%; /* Muted Border */
+
+    --destructive: 0 100% 50%; /* Bright Red */
+    --destructive-foreground: 0 0% 100%; /* Pure White */
 
     /* Chart colors for dark mode */
-    --chart-1: 45 80% 60%;
-    --chart-2: 40 75% 65%;
-    --chart-3: 35 70% 55%;
-    --chart-4: 30 65% 60%;
-    --chart-5: 25 60% 65%;
+    --chart-1: 220 90% 56%;
+    --chart-2: 220 80% 50%;
+    --chart-3: 220 70% 45%;
+    --chart-4: 220 60% 40%;
+    --chart-5: 220 50% 35%;
   }
 
   * {
@@ -229,6 +229,23 @@
     @apply transition-transform duration-200 
       hover:scale-[1.02] hover:shadow-lg;
   }
+
+  .skeleton {
+    @apply animate-pulse bg-muted rounded;
+  }
+  
+  .fade-in-section {
+    @apply opacity-0 translate-y-8 transition-all duration-700;
+  }
+  
+  .fade-in-section.is-visible {
+    @apply opacity-100 translate-y-0;
+  }
+
+  .hover-card {
+    @apply transition-all duration-300 hover:scale-[1.02] 
+    hover:shadow-lg hover:-translate-y-1;
+  }
 }
 
 @layer utilities {
@@ -237,15 +254,19 @@
   }
   
   .responsive-grid {
-    @apply grid grid-cols-1 
+    @apply grid gap-6 
+      grid-cols-1 
       sm:grid-cols-2 
       lg:grid-cols-3 
-      xl:grid-cols-4 
-      gap-4 sm:gap-6 lg:gap-8;
+      xl:grid-cols-4;
   }
 
   .responsive-text {
-    @apply text-base sm:text-lg md:text-xl;
+    @apply text-sm sm:text-base lg:text-lg;
+  }
+
+  .responsive-container {
+    @apply w-[90%] max-w-[1200px] mx-auto;
   }
 }
 
