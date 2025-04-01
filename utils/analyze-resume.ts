@@ -3,7 +3,7 @@ import { saveResumeToFirebase } from "./firebase-helpers";
 
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
 
-export async function analyzeResume(file: File, userId: string, userEmail: string) {
+export async function analyzeResume(file: File, userId: string, userEmail: string, vendorId: string | null = null, vendorName: string | null = null) {
   try {
     const model = genAI.getGenerativeModel({ 
       model: "gemini-1.5-pro",
@@ -60,8 +60,15 @@ export async function analyzeResume(file: File, userId: string, userEmail: strin
       throw new Error("Invalid JSON response from AI model");
     }
 
-    // Save to Firebase
-    const savedData = await saveResumeToFirebase(file, analysisJson, userId, userEmail);
+    // Save to Firebase with just vendor ID and name
+    const savedData = await saveResumeToFirebase(
+      file, 
+      analysisJson, 
+      userId, 
+      userEmail, 
+      vendorId, 
+      vendorName
+    );
     
     return {
       analysis: analysisJson,

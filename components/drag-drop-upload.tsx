@@ -10,7 +10,7 @@ import { generateUUID } from "@/utils/generate-id"
 import { useToast } from "@/hooks/use-toast"
 import { analyzeResume } from "@/utils/analyze-resume"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { collection, getDocs, doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { collection, getDocs, doc, getDoc } from "firebase/firestore"
 import { db } from "@/FirebaseConfig"
 
 // Add this type definition at the top of the file
@@ -54,6 +54,14 @@ type AnalysisResult = {
   profile_summary: string | null;
   vendor_id?: string;
   vendor_name?: string;
+  vendor_details?: {
+    address?: string;
+    contact_person?: string;
+    country?: string;
+    email?: string;
+    phone?: string;
+    state?: string;
+  };
 };
 
 // Add this interface near the top of the file with other type definitions
@@ -63,10 +71,17 @@ interface FirebaseError {
   name: string;
 }
 
-// Add this interface
+// Update the Vendor interface
 interface Vendor {
   id: string;
   name: string;
+  address?: string;
+  contact_person?: string;
+  country?: string;
+  email?: string;
+  phone?: string;
+  state?: string;
+  status?: string;
 }
 
 export function DragDropUpload() {
@@ -85,20 +100,62 @@ export function DragDropUpload() {
   // Add these new states
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [selectedVendor, setSelectedVendor] = useState<string>("no-vendor")
+  const [isLoadingVendors, setIsLoadingVendors] = useState(true);
 
-  // Add this useEffect to fetch vendors
+  // Replace the existing fetchVendors function in your useEffect
   useEffect(() => {
     const fetchVendors = async () => {
+      setIsLoadingVendors(true);
       try {
+        const vendorsList: Vendor[] = [];
+        
+        // Get all vendor documents
         const vendorsCollection = collection(db, "vendors");
         const vendorsSnapshot = await getDocs(vendorsCollection);
-        const vendorsList = vendorsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          name: doc.data().name
-        }));
+        
+        // For each vendor, try to get details from the details/info subcollection
+        for (const vendorDoc of vendorsSnapshot.docs) {
+          try {
+            const vendorId = vendorDoc.id;
+            const infoRef = doc(db, "vendors", vendorId, "details", "info");
+            const infoSnap = await getDoc(infoRef);
+            
+            if (infoSnap.exists()) {
+              // If details/info exists, use that data
+              const infoData = infoSnap.data();
+              vendorsList.push({
+                id: vendorId,
+                name: infoData.name || "Unknown Vendor",
+                address: infoData.address,
+                contact_person: infoData.contact_person,
+                country: infoData.country,
+                email: infoData.email,
+                phone: infoData.phone,
+                state: infoData.state,
+                status: infoData.status
+              });
+            } else {
+              // Fallback to checking if name exists in the main vendor document
+              const vendorData = vendorDoc.data();
+              if (vendorData.name) {
+                vendorsList.push({
+                  id: vendorId,
+                  name: vendorData.name
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching details for vendor ${vendorDoc.id}:`, error);
+          }
+        }
+        
+        // Sort vendors alphabetically by name
+        vendorsList.sort((a, b) => a.name.localeCompare(b.name));
         setVendors(vendorsList);
       } catch (error) {
         console.error("Error fetching vendors:", error);
+      } finally {
+        setIsLoadingVendors(false);
       }
     };
 
@@ -191,30 +248,26 @@ export function DragDropUpload() {
           try {
             setIsAnalyzing(true);
             
-            // Add vendor information to the analysis
-            const analysisResult = await analyzeResume(file, user.uid, user.email!);
+            // Get vendor details for the selected vendor, but only pass ID and name to analyzeResume
+            const selectedVendorObj = selectedVendor === "no-vendor" ? null : 
+              vendors.find(v => v.id === selectedVendor);
             
-            // Update the analysis with vendor information
-            const updatedAnalysis = {
-              ...analysisResult.analysis,
-              vendor_id: selectedVendor === "no-vendor" ? null : selectedVendor,
-              vendor_name: selectedVendor === "no-vendor" ? null : vendors.find(v => v.id === selectedVendor)?.name
-            };
+            // Pass only vendor ID and name to analyze resume
+            const analysisResult = await analyzeResume(
+              file, 
+              user.uid, 
+              user.email!, 
+              selectedVendor === "no-vendor" ? null : selectedVendor,
+              selectedVendorObj?.name || null
+            );
 
-            setAnalysisResult(updatedAnalysis);
+            // Store the analysis result in state
+            setAnalysisResult(analysisResult.analysis);
             setUploadStatus("success");
             
-            // Store vendor information in Firebase
-            const resumeRef = doc(db, "resumes", resumeId);
-            await setDoc(resumeRef, {
-              ...analysisResult,
-              vendor_id: selectedVendor || null,
-              uploaded_at: serverTimestamp()
-            });
-
             toast({
               title: "Success",
-              description: "Resume analyzed and vendor tagged successfully",
+              description: "Resume analyzed" + (selectedVendorObj ? ` and tagged with ${selectedVendorObj.name}` : ""),
             });
           } catch (error: unknown) {
             const firebaseError = error as FirebaseError;
@@ -292,17 +345,24 @@ export function DragDropUpload() {
                 feedback.
               </p>
 
-              <div className="mb-4">
+              <div className="mb-4 w-full max-w-md">
                 <label className="text-sm font-medium mb-2 block">Select Vendor (Optional)</label>
-                <Select value={selectedVendor} onValueChange={setSelectedVendor}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a vendor" />
+                <Select value={selectedVendor} onValueChange={setSelectedVendor} disabled={isLoadingVendors}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={isLoadingVendors ? "Loading vendors..." : "Choose a vendor"} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="no-vendor">No Vendor</SelectItem>
                     {vendors.map((vendor) => (
                       <SelectItem key={vendor.id} value={vendor.id}>
-                        {vendor.name}
+                        <div className="flex flex-col">
+                          <span>{vendor.name}</span>
+                          {vendor.state && vendor.country && (
+                            <span className="text-xs text-muted-foreground">
+                              {vendor.state}, {vendor.country}
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
