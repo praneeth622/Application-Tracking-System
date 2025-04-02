@@ -22,6 +22,7 @@ import {
   Shield, // Add this import for admin icon
 } from "lucide-react"
 import { useMobile } from "@/hooks/use-mobile"
+import { toast } from '@/components/ui/use-toast'
 
 interface DashboardSidebarProps {
   isOpen: boolean
@@ -48,14 +49,22 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
       if (!user) return
 
       try {
-        const userDoc = await getDoc(doc(db, "users", user.uid))
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as UserProfile
+        // Updated path to match your database structure
+        const userProfileRef = doc(db, "users", user.uid, "userProfile", "data")
+        const userProfileDoc = await getDoc(userProfileRef)
+        
+        if (userProfileDoc.exists()) {
+          const userData = userProfileDoc.data() as UserProfile
           setProfile(userData)
           setIsAdmin(userData.role === "admin")
         }
       } catch (error) {
         console.error("Error fetching user profile:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load user profile",
+          variant: "destructive",
+        })
       }
     }
 
