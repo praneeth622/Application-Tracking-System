@@ -18,7 +18,8 @@ import {
   HelpCircle,
   ChevronLeft,
   ArrowRightToLine,
-  Building, // Add this import for vendor icon
+  Building,
+  Shield, // Add this import for admin icon
 } from "lucide-react"
 import { useMobile } from "@/hooks/use-mobile"
 
@@ -40,6 +41,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
   const [activeItem, setActiveItem] = useState("upload")
   const [isHovering, setIsHovering] = useState<string | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -48,7 +50,9 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
       try {
         const userDoc = await getDoc(doc(db, "users", user.uid))
         if (userDoc.exists()) {
-          setProfile(userDoc.data() as UserProfile)
+          const userData = userDoc.data() as UserProfile
+          setProfile(userData)
+          setIsAdmin(userData.role === "admin")
         }
       } catch (error) {
         console.error("Error fetching user profile:", error)
@@ -92,6 +96,17 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
     { id: "keywords", label: "Keyword Matcher", icon: <Search className="w-5 h-5" />, href: "/keyword-matcher" },
     { id: "jobs", label: "Job Management", icon: <Briefcase className="w-5 h-5" />, href: "/job" },
     { id: "vendors", label: "Vendor Management", icon: <Building className="w-5 h-5" />, href: "/vendor" },
+  ]
+
+  const adminNavItems = [
+    {
+      id: "admin",
+      label: "Admin Dashboard",
+      icon: <Shield className="w-5 h-5" />,
+      href: "/admin",
+      adminOnly: true,
+    },
+    // Add more admin-only navigation items here
   ]
 
   const secondaryNavItems = [
@@ -203,6 +218,58 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
                 </div>
               ))}
             </nav>
+
+            {isAdmin && (
+              <>
+                {(isOpen || isMobile) && (
+                  <div className="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
+                    Admin
+                  </div>
+                )}
+                <nav className="space-y-1 mb-8">
+                  {adminNavItems.map((item) => (
+                    <div
+                      key={item.id}
+                      onMouseEnter={() => setIsHovering(item.id)}
+                      onMouseLeave={() => setIsHovering(null)}
+                      className="relative"
+                    >
+                      <Link
+                        href={item.href}
+                        className={`flex items-center ${isOpen || isMobile ? "px-3" : "justify-center"} py-2.5 rounded-lg transition-colors relative group ${
+                          activeItem === item.id
+                            ? "bg-primary/10 text-primary font-medium"
+                            : "text-foreground hover:bg-muted"
+                        }`}
+                        onClick={() => {
+                          setActiveItem(item.id)
+                          if (isMobile) setIsOpen(false)
+                        }}
+                      >
+                        <span className={`${isOpen || isMobile ? "mr-3" : ""} flex-shrink-0`}>{item.icon}</span>
+                        {(isOpen || isMobile) && <span className="whitespace-nowrap">{item.label}</span>}
+                        {activeItem === item.id && (
+                          <motion.div
+                            layoutId="activeIndicator"
+                            className="absolute left-0 w-1 h-6 bg-primary rounded-r-full"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.2 }}
+                          />
+                        )}
+                      </Link>
+
+                      {/* Tooltip for collapsed mode */}
+                      {!isOpen && !isMobile && isHovering === item.id && (
+                        <div className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 bg-foreground text-background text-xs py-1 px-2 rounded shadow-lg z-50 whitespace-nowrap">
+                          {item.label}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </nav>
+              </>
+            )}
 
             {(isOpen || isMobile) && (
               <div className="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
