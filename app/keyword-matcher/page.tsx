@@ -4,13 +4,15 @@ import { useState, useEffect } from 'react'
 import { db } from "@/FirebaseConfig"
 import { doc, getDoc, Timestamp } from "firebase/firestore"
 import { useAuth } from "@/context/auth-context"
-import { RecentFileCard } from "@/components/recent-file-card"
 import { Input } from "@/components/ui/input"
-import { Search } from "lucide-react"
+import { Search, SlidersHorizontal } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { motion } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
+import { FilterSection } from "@/components/filter-section"
+import { Button } from "@/components/ui/button"
+import { ResumeCard } from "@/components/resume-card"
 
 // First, let's update the Resume interface to match the JSON structure
 interface Resume {
@@ -218,135 +220,134 @@ export default function KeywordMatcherPage() {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
         <div className="container mx-auto py-8 px-4 md:px-8">
+          {/* Header Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h1 className="text-3xl font-bold">Keyword Matcher</h1>
+                <p className="text-muted-foreground mt-1">
+                  Find resumes matching specific skills and requirements
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <Badge variant="secondary" className="text-sm">
+                  {filteredResumes.length} matches found
+                </Badge>
+              </div>
+            </div>
+
+            {selectedKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-4">
+                {selectedKeywords.map(keyword => (
+                  <Badge 
+                    key={keyword}
+                    variant="secondary"
+                    className="px-3 py-1 cursor-pointer hover:bg-destructive/20"
+                    onClick={() => toggleKeyword(keyword)}
+                  >
+                    {keyword} ×
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-8">
-            {/* Keyword Filter Sidebar */}
-            <div className="w-64 flex-shrink-0 hidden md:block">
-              <div className="sticky top-8">
-                <h2 className="text-xl font-semibold mb-4">Filter by Keywords</h2>
+            {/* Filter Sidebar */}
+            <div className="w-80 flex-shrink-0 hidden md:block">
+              <div className="sticky top-8 bg-card rounded-lg border p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold">Filters</h2>
+                  <SlidersHorizontal className="w-5 h-5 text-muted-foreground" />
+                </div>
                 
-                {/* Search keywords */}
-                <div className="relative mb-4">
+                <div className="relative mb-6">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     type="text"
                     placeholder="Search keywords..."
-                    className="pl-9"
+                    className="pl-9 bg-background"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
 
-                {/* Keywords list */}
-                <div className="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
-                  {filteredKeywords.map(keyword => (
-                    <div key={keyword} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`skill-${keyword}`}
-                        checked={selectedKeywords.includes(keyword)}
-                        onCheckedChange={() => toggleKeyword(keyword)}
-                      />
-                      <label
-                        htmlFor={`skill-${keyword}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {keyword}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-3">Education</h3>
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
-                    {Array.from(educationFilters).map(edu => (
-                      <div key={edu} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`education-${edu}`}
-                          checked={selectedEducation.includes(edu)}
-                          onCheckedChange={() => setSelectedEducation(prev => 
-                            prev.includes(edu) ? prev.filter(e => e !== edu) : [...prev, edu]
-                          )}
-                        />
-                        <label
-                          htmlFor={`education-${edu}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {edu}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-3">Location</h3>
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
-                    {Array.from(locations).map(location => (
-                      <div key={location} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`location-${location}`}
-                          checked={selectedLocations.includes(location)}
-                          onCheckedChange={() => setSelectedLocations(prev => 
-                            prev.includes(location) ? prev.filter(l => l !== location) : [...prev, location]
-                          )}
-                        />
-                        <label
-                          htmlFor={`location-${location}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {location}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-3">Experience</h3>
-                  <div className="space-y-2">
-                    {experienceRanges.map(range => (
-                      <div key={range} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`experience-${range}`}
-                          checked={selectedExperience.includes(range)}
-                          onCheckedChange={() => setSelectedExperience(prev => 
-                            prev.includes(range) ? prev.filter(e => e !== range) : [...prev, range]
-                          )}
-                        />
-                        <label
-                          htmlFor={`experience-${range}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {range}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
+                {/* Filter Sections with better styling */}
+                <div className="space-y-6">
+                  <FilterSection 
+                    title="Keywords" 
+                    items={filteredKeywords}
+                    selected={selectedKeywords}
+                    onToggle={toggleKeyword}
+                  />
+                  
+                  <FilterSection 
+                    title="Education" 
+                    items={Array.from(educationFilters)}
+                    selected={selectedEducation}
+                    onToggle={(edu) => setSelectedEducation(prev => 
+                      prev.includes(edu) ? prev.filter(e => e !== edu) : [...prev, edu]
+                    )}
+                  />
+                  
+                  <FilterSection 
+                    title="Location" 
+                    items={Array.from(locations)}
+                    selected={selectedLocations}
+                    onToggle={(loc) => setSelectedLocations(prev => 
+                      prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc]
+                    )}
+                  />
+                  
+                  <FilterSection 
+                    title="Experience" 
+                    items={experienceRanges}
+                    selected={selectedExperience}
+                    onToggle={(exp) => setSelectedExperience(prev => 
+                      prev.includes(exp) ? prev.filter(e => e !== exp) : [...prev, exp]
+                    )}
+                  />
                 </div>
               </div>
             </div>
 
             {/* Resumes Grid */}
             <div className="flex-1">
-              <h2 className="text-xl font-semibold mb-4">
-                Matching Resumes ({filteredResumes.length})
-              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold">
+                  Matching Resumes ({filteredResumes.length})
+                </h2>
+                <div className="flex items-center space-x-2">
+                  <Button variant="outline" size="sm">
+                    <SlidersHorizontal className="w-4 h-4 mr-2" />
+                    Sort by
+                  </Button>
+                </div>
+              </div>
               
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4">
                 {filteredResumes.map((resume, index) => (
-                  <RecentFileCard
+                  <ResumeCard
                     key={index}
-                    fileName={resume.filename}
-                    fileSize="N/A"
+                    // fileName={resume.filename}
+                    candidateName={resume.analysis.name}
                     uploadDate={new Date(resume.uploadedAt.seconds * 1000).toLocaleString()}
-                    score={75}
                     fileUrl={resume.filelink}
+                    education={resume.analysis.education_details[0]?.degree}
+                    experience={resume.analysis.experience_years}
                   />
                 ))}
 
                 {filteredResumes.length === 0 && (
-                  <div className="text-center py-12 text-muted-foreground">
-                    No resumes match the selected filters
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                      <Search className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-1">No matches found</h3>
+                    <p className="text-muted-foreground">
+                      Try adjusting your filters to find more resumes
+                    </p>
                   </div>
                 )}
               </div>

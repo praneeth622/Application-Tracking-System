@@ -77,7 +77,7 @@ export default function AdminDashboard() {
   const statsCards: StatsCard[] = [
     {
       title: "Total Users",
-      value: stats.totalUsers,
+      value: stats.totalUsers,  
       icon: <Users className="w-6 h-6" />,
       description: "Active users in the system",
     },

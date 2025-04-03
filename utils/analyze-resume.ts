@@ -37,10 +37,16 @@ export async function analyzeResume(file: File, userId: string, userEmail: strin
           role: "user",
           parts: [
             { text: prompt },
-            { inlineData: { mimeType: "application/pdf", data: base64File } },
+            { inlineData: { 
+              mimeType: "application/pdf", 
+              data: base64File 
+            }},
           ],
         },
       ],
+    }).catch(error => {
+      console.error("Gemini API error:", error);
+      throw new Error("Failed to analyze resume with AI model");
     });
 
     const response = await result.response;
