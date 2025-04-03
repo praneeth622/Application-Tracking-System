@@ -1,14 +1,14 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Building, MapPin, Phone, Mail, Search } from 'lucide-react'
+import { Plus, MapPin, Phone, Mail, Search } from 'lucide-react'
 import { DashboardSidebar } from '@/components/dashboard-sidebar'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useAuth } from '@/context/auth-context'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '@/FirebaseConfig'
 import { toast } from '@/components/ui/use-toast'
 import {
@@ -16,8 +16,9 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 interface Vendor {
   vendor_id: string
@@ -36,6 +37,267 @@ interface Vendor {
   }
 }
 
+type VendorFormState = Omit<Vendor, 'vendor_id' | 'created_at' | 'metadata'>
+
+const VendorDetailsSheet = memo(({ 
+  editData, 
+  setEditData, 
+  user, 
+  setVendors 
+}: {
+  editData: {
+    isEditing: boolean;
+    formState: VendorFormState | null;
+    selectedVendor: Vendor | null;
+    isSheetOpen: boolean;
+  };
+  setEditData: React.Dispatch<React.SetStateAction<typeof editData>>;
+  user: { email: string | null };
+  setVendors: React.Dispatch<React.SetStateAction<Vendor[]>>;
+}) => {
+  if (!editData.selectedVendor) return null;
+
+  const handleEditToggle = () => {
+    if (editData.isEditing) {
+      setEditData(prev => ({
+        ...prev,
+        isEditing: false,
+        formState: null
+      }))
+    } else {
+      setEditData(prev => ({
+        ...prev,
+        isEditing: true,
+        formState: {
+          name: editData.selectedVendor!.name,
+          contact_person: editData.selectedVendor!.contact_person,
+          email: editData.selectedVendor!.email,
+          phone: editData.selectedVendor!.phone,
+          address: editData.selectedVendor!.address,
+          state: editData.selectedVendor!.state,
+          country: editData.selectedVendor!.country,
+          status: editData.selectedVendor!.status
+        }
+      }))
+    }
+  }
+
+  const handleInputChange = (field: keyof VendorFormState, value: string) => {
+    setEditData(prev => ({
+      ...prev,
+      formState: prev.formState ? {
+        ...prev.formState,
+        [field]: value
+      } : null
+    }))
+  }
+
+  const handleSheetClose = () => {
+    // First close the sheet
+    setEditData(prev => ({
+      ...prev,
+      isSheetOpen: false
+    }));
+    
+    // Then reset other states after a small delay
+    setTimeout(() => {
+      setEditData(prev => ({
+        ...prev,
+        isEditing: false,
+        formState: null,
+        selectedVendor: null
+      }));
+    }, 300); // Delay matches the sheet close animation
+  };
+
+  const handleSave = async () => {
+    if (!editData.selectedVendor || !editData.formState) return;
+
+    try {
+      const vendorDetailsRef = doc(
+        db, 
+        "vendors", 
+        editData.selectedVendor.vendor_id, 
+        "details", 
+        "info"
+      );
+
+      await updateDoc(vendorDetailsRef, {
+        ...editData.formState,
+        metadata: {
+          ...editData.selectedVendor.metadata,
+          last_modified_by: user?.email || ''
+        }
+      });
+
+      // Update local state
+      setVendors(prevVendors => 
+        prevVendors.map(vendor => 
+          vendor.vendor_id === editData.selectedVendor?.vendor_id
+            ? {
+                ...vendor,
+                ...editData.formState!,
+                metadata: {
+                  ...vendor.metadata,
+                  last_modified_by: user?.email || ''
+                }
+              }
+            : vendor
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: "Vendor updated successfully",
+      });
+
+      // Reset edit state
+      setEditData(prev => ({
+        ...prev,
+        isEditing: false,
+        formState: null,
+        isSheetOpen: false,
+        selectedVendor: null
+      }));
+    } catch (error) {
+      console.error("Error updating vendor:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update vendor",
+        variant: "destructive"
+      });
+    }
+  };
+
+  return (
+    <Sheet open={editData.isSheetOpen} onOpenChange={handleSheetClose}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader className="mb-6">
+          <div className="flex justify-between items-center">
+            <SheetTitle className="text-2xl">
+              {editData.isEditing ? (
+                <Input
+                  value={editData.formState?.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  className="text-2xl font-bold"
+                />
+              ) : (
+                editData.selectedVendor.name
+              )}
+            </SheetTitle>
+            <Button
+              variant={editData.isEditing ? "destructive" : "secondary"}
+              onClick={handleEditToggle}
+            >
+              {editData.isEditing ? "Cancel" : "Edit"}
+            </Button>
+          </div>
+        </SheetHeader>
+
+        <div className="space-y-6">
+          <div className="grid gap-4 py-4">
+            {editData.isEditing ? (
+              <>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="contact_person" className="text-right">Contact Person</Label>
+                  <Input
+                    id="contact_person"
+                    value={editData.formState?.contact_person}
+                    onChange={(e) => handleInputChange('contact_person', e.target.value)}
+                    className="col-span-3"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="email" className="text-right">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={editData.formState?.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    className="col-span-3"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="phone" className="text-right">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={editData.formState?.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    className="col-span-3"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="state" className="text-right">State</Label>
+                  <Input
+                    id="state"
+                    value={editData.formState?.state}
+                    onChange={(e) => handleInputChange('state', e.target.value)}
+                    className="col-span-3"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="country" className="text-right">Country</Label>
+                  <Input
+                    id="country"
+                    value={editData.formState?.country}
+                    onChange={(e) => handleInputChange('country', e.target.value)}
+                    className="col-span-3"
+                  />
+                </div>
+                <div className="flex justify-end mt-4">
+                  <Button onClick={handleSave}>Save Changes</Button>
+                </div>
+              </>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium mb-1">Email</p>
+                  <p className="text-muted-foreground">{editData.selectedVendor.email}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-1">Phone</p>
+                  <p className="text-muted-foreground">{editData.selectedVendor.phone}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-1">State</p>
+                  <p className="text-muted-foreground">{editData.selectedVendor.state}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-1">Country</p>
+                  <p className="text-muted-foreground">{editData.selectedVendor.country}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="text-sm text-muted-foreground border-t pt-4">
+            <p>Created by: {editData.selectedVendor.metadata.created_by}</p>
+            <p>Created: {editData.selectedVendor.created_at.toLocaleString()}</p>
+            <p>Status: 
+              {editData.isEditing ? (
+                <select
+                  value={editData.formState?.status}
+                  onChange={(e) => handleInputChange('status', e.target.value as 'active' | 'inactive')}
+                  className="ml-2 px-2 py-1 rounded border"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              ) : (
+                <span className={`px-2 py-1 rounded-full text-xs ${
+                  editData.selectedVendor.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>{editData.selectedVendor.status}</span>
+              )}
+            </p>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+});
+
+VendorDetailsSheet.displayName = 'VendorDetailsSheet';
+
 export default function VendorPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
@@ -43,9 +305,13 @@ export default function VendorPage() {
   const router = useRouter()
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null)
-  const [isSheetOpen, setIsSheetOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [editData, setEditData] = useState({
+    isEditing: false,
+    formState: null as VendorFormState | null,
+    selectedVendor: null as Vendor | null,
+    isSheetOpen: false
+  })
 
   useEffect(() => {
     const fetchVendors = async () => {
@@ -104,55 +370,11 @@ export default function VendorPage() {
   }, [isMobile])
 
   const handleVendorClick = (vendor: Vendor) => {
-    setSelectedVendor(vendor)
-    setIsSheetOpen(true)
-  }
-
-  const VendorDetailsSheet = () => {
-    if (!selectedVendor) return null
-
-    return (
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-          <SheetHeader className="mb-6">
-            <SheetTitle className="text-2xl">{selectedVendor.name}</SheetTitle>
-            <SheetDescription className="flex items-center text-base">
-              <Building className="w-4 h-4 mr-2" />
-              {selectedVendor.contact_person}
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
-              <div>
-                <p className="text-sm font-medium mb-1">Email</p>
-                <p className="text-muted-foreground">{selectedVendor.email}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-1">Phone</p>
-                <p className="text-muted-foreground">{selectedVendor.phone}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-1">State</p>
-                <p className="text-muted-foreground">{selectedVendor.state}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-1">Country</p>
-                <p className="text-muted-foreground">{selectedVendor.country}</p>
-              </div>
-            </div>
-
-            <div className="text-sm text-muted-foreground border-t pt-4">
-              <p>Created by: {selectedVendor.metadata.created_by}</p>
-              <p>Created: {selectedVendor.created_at.toLocaleString()}</p>
-              <p>Status: <span className={`px-2 py-1 rounded-full text-xs ${
-                selectedVendor.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>{selectedVendor.status}</span></p>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-    )
+    setEditData(prev => ({
+      ...prev,
+      selectedVendor: vendor,
+      isSheetOpen: true
+    }))
   }
 
   const filteredVendors = vendors.filter(vendor => 
@@ -262,8 +484,17 @@ export default function VendorPage() {
             )}
           </div>
         </div>
-        {selectedVendor && <VendorDetailsSheet />}
+        <VendorDetailsSheet 
+          editData={editData}
+          setEditData={setEditData}
+          user={{ email: user?.email || null }}
+          setVendors={setVendors}
+        />
       </motion.div>
     </div>
   )
 }
+
+
+
+

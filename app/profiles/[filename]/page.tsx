@@ -14,7 +14,6 @@ import { ArrowLeft } from 'lucide-react'
 import { ProfileAnalysis } from '@/components/profile/profile-analysis'
 import { CompanyFeedback } from '@/components/profile/company-feedback'
 
-
 interface Analysis {
   name: string
   email: string
@@ -45,6 +44,41 @@ interface Profile {
   analysis?: Analysis
   profile_summary?: string
 }
+
+// Add this helper function before the ProfilePage component
+const getProfileDisplayName = (profile: Profile) => {
+  if (!profile) return 'Untitled Profile';
+
+  // Try to construct name from analysis data
+  if (profile.analysis) {
+    const { name, work_experience_details } = profile.analysis;
+    const latestRole = work_experience_details?.[0];
+    
+    // If we have both name and role, show "Name - Current Role"
+    if (name && latestRole?.position) {
+      return `${name} - ${latestRole.position}`;
+    }
+    
+    // If we only have name, use that
+    if (name) {
+      return name;
+    }
+    
+    // If we only have work experience, show "Role at Company"
+    if (latestRole?.position && latestRole?.company) {
+      return `${latestRole.position} at ${latestRole.company}`;
+    }
+  }
+
+  // Clean up filename as last resort
+  return profile.filename
+    .replace(/\.pdf$/i, '') // Remove .pdf extension
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, '') // Remove UUID
+    .replace(/_/g, ' ') // Replace underscores with spaces
+    .replace(/([A-Z])/g, ' $1') // Add spaces before capital letters
+    .replace(/\s+/g, ' ') // Remove multiple spaces
+    .trim() || 'Untitled Resume';
+};
 
 export default function ProfilePage() {
   const params = useParams()
@@ -129,7 +163,12 @@ export default function ProfilePage() {
               <div className="rounded-lg border bg-card p-6 shadow-sm">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h1 className="text-3xl font-bold mb-2">{profile.filename}</h1>
+                    <h1 className="text-3xl font-bold mb-2">
+                      {getProfileDisplayName(profile)}
+                    </h1>
+                    {/* <div className="text-sm text-muted-foreground mb-2">
+                      {profile.filename}
+                    </div> */}
                     <div className="flex items-center text-sm text-muted-foreground">
                       <div className="flex items-center">
                         <div className="w-2 h-2 rounded-full bg-primary mr-2" />
