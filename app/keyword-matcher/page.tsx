@@ -336,10 +336,11 @@ export default function KeywordMatcherPage() {
         animate={{
           marginLeft: isMobile ? 0 : isSidebarOpen ? "16rem" : "4.5rem",
           width: isMobile ? "100%" : isSidebarOpen ? "calc(100% - 16rem)" : "calc(100% - 4.5rem)",
+          paddingLeft: 0,
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
-        <div className={`py-8 ${isSidebarOpen ? 'container mx-auto px-4 md:px-8' : 'px-6 sm:px-8 md:px-10'}`}>
+        <div className="py-8 px-3 md:px-5 max-w-[1500px] mx-auto">
           {/* Header Section with gradient background */}
           <div className="mb-8 relative overflow-hidden rounded-xl bg-gradient-to-br from-violet-500/10 via-violet-400/5 to-blue-500/10 p-4 sm:p-8 border border-violet-200/20 dark:border-violet-800/20 shadow-sm">
             <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,#fff,transparent)]"></div>

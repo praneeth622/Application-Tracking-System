@@ -1,18 +1,21 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
-import { useAuth } from '@/context/auth-context'
-import { db } from '@/FirebaseConfig'
-import { doc, getDoc, Timestamp } from 'firebase/firestore'
-import { DashboardSidebar } from '@/components/dashboard-sidebar'
-import { motion } from 'framer-motion'
-import { useMediaQuery } from '@/hooks/use-media-query'
-import { toast } from '@/components/ui/use-toast'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from "react"
+import { useAuth } from "@/context/auth-context"
+import { db } from "@/FirebaseConfig"
+import { doc, getDoc, type Timestamp } from "firebase/firestore"
+import { DashboardSidebar } from "@/components/dashboard-sidebar"
+import { motion } from "framer-motion"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { toast } from "@/components/ui/use-toast"
+import { useRouter } from "next/navigation"
 import { Icons } from "@/components/icons"
 import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ProfileCard } from "@/components/profiles/profile-card"
+import { EmptyState } from "@/components/profiles/empty-state"
+import { Input } from "@/components/ui/input"
+import { Search } from "lucide-react"
 
 interface Analysis {
   name: string
@@ -44,36 +47,13 @@ interface Profile {
   companyFeedback?: string[]
 }
 
-const getProfileDisplayName = (profile: Profile) => {
-  if (profile.analysis) {
-    const { name, email } = profile.analysis;
-    
-    if (name && email) {
-      return {
-        displayName: name,
-        contactInfo: email
-      };
-    }
-    
-    if (name) {
-      return {
-        displayName: name,
-        contactInfo: 'No contact info'
-      };
-    }
-  }
-  
-  return {
-    displayName: 'Untitled Profile',
-    contactInfo: 'No contact info'
-  };
-};
-
 export default function ProfilesPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const [filteredProfiles, setFilteredProfiles] = useState<Profile[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
   const { user } = useAuth()
   const router = useRouter()
 
@@ -90,6 +70,7 @@ export default function ProfilesPage() {
           const userData = userDoc.data()
           if (userData.resumes) {
             setProfiles(userData.resumes)
+            setFilteredProfiles(userData.resumes)
           }
         }
       } catch (error) {
@@ -107,6 +88,54 @@ export default function ProfilesPage() {
     fetchProfiles()
   }, [user])
 
+  // Filter profiles based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredProfiles(profiles)
+      return
+    }
+
+    const query = searchQuery.toLowerCase()
+    const filtered = profiles.filter((profile) => {
+      const { analysis } = profile
+
+      // Search in name and email
+      if (analysis?.name?.toLowerCase().includes(query) || analysis?.email?.toLowerCase().includes(query)) {
+        return true
+      }
+
+      // Search in skills
+      if (analysis?.key_skills?.some((skill) => skill.toLowerCase().includes(query))) {
+        return true
+      }
+
+      // Search in work experience
+      if (
+        analysis?.work_experience_details?.some(
+          (exp) => exp.company.toLowerCase().includes(query) || exp.position.toLowerCase().includes(query),
+        )
+      ) {
+        return true
+      }
+
+      // Search in education
+      if (
+        analysis?.education_details?.some(
+          (edu) =>
+            edu.degree.toLowerCase().includes(query) ||
+            edu.major.toLowerCase().includes(query) ||
+            edu.institute.toLowerCase().includes(query),
+        )
+      ) {
+        return true
+      }
+
+      return false
+    })
+
+    setFilteredProfiles(filtered)
+  }, [searchQuery, profiles])
+
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
       <DashboardSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
@@ -117,85 +146,102 @@ export default function ProfilesPage() {
         animate={{
           marginLeft: isMobile ? 0 : isSidebarOpen ? "16rem" : "4.5rem",
           width: isMobile ? "100%" : isSidebarOpen ? "calc(100% - 16rem)" : "calc(100% - 4.5rem)",
+          paddingLeft: 0,
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
-        <div className="container mx-auto py-8 px-4 md:px-8">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold">Profile Management</h1>
-              <p className="text-muted-foreground mt-1">
-                Manage and analyze your uploaded resumes
-              </p>
-            </div>
-            <Button
-              onClick={() => router.push('/upload-resume')}
-              className="flex items-center gap-2"
-            >
-              <Icons.upload className="w-4 h-4" />
-              Upload New Resume
-            </Button>
-          </div>
-
-          {isLoading ? (
-            <div className="grid md:grid-cols-3 gap-6">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="relative">
-                  <CardHeader>
-                    <Skeleton className="h-6 w-3/4" />
-                  </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-4 w-1/2 mb-2" />
-                    <Skeleton className="h-4 w-2/3" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : profiles.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed rounded-lg">
-              <Icons.file className="w-12 h-12 mx-auto text-muted-foreground/50" />
-              <h3 className="mt-4 text-lg font-medium">No profiles yet</h3>
-              <p className="text-muted-foreground mt-1">
-                Upload your first resume to get started
-              </p>
-              <Button
-                onClick={() => router.push('/upload')}
-                variant="secondary"
-                className="mt-4"
-              >
-                Upload Resume
+        <div className="py-8 px-3 md:px-5 max-w-[1500px] mx-auto">
+          {/* Header Section */}
+          <div className="mb-8">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-3xl font-bold">Profile Management</h1>
+                <p className="text-muted-foreground mt-1">Manage and analyze your uploaded resumes</p>
+              </div>
+              <Button onClick={() => router.push("/upload-resume")} className="flex items-center gap-2">
+                <Icons.upload className="w-4 h-4" />
+                Upload New Resume
               </Button>
             </div>
-          ) : (
-            <div className="grid md:grid-cols-3 gap-6">
-              {profiles.map((profile) => (
-                <Card
-                  key={profile.filename}
-                  className="relative hover:shadow-md transition-all cursor-pointer"
-                  onClick={() => router.push(`/profiles/${encodeURIComponent(profile.filename)}`)}
-                >
-                  <CardHeader>
-                    <CardTitle className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2">
-                        <Icons.user className="w-5 h-5 text-primary" />
-                        <span className="font-semibold text-lg">
-                          {getProfileDisplayName(profile).displayName}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Icons.mail className="w-4 h-4" />
-                        <span className="truncate">
-                          {getProfileDisplayName(profile).contactInfo}
-                        </span>
-                      </div>
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
+
+            {/* Search and Filter Section */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="Search by name, skills, company..."
+                className="pl-10 pr-4"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Content Section */}
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="border rounded-lg p-6 space-y-4">
+                  <div className="space-y-2">
+                    <Skeleton className="h-6 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+                </div>
               ))}
             </div>
+          ) : filteredProfiles.length === 0 ? (
+            searchQuery ? (
+              <div className="border border-dashed rounded-lg p-8">
+                <EmptyState
+                  title="No matching profiles"
+                  description={`No profiles found matching "${searchQuery}". Try a different search term or clear your search.`}
+                  actionLabel="Clear Search"
+                  actionHref="#"
+                  icon="file"
+                />
+              </div>
+            ) : (
+              <div className="border border-dashed rounded-lg p-8">
+                <EmptyState
+                  title="No profiles yet"
+                  description="Upload your first resume to get started with profile analysis"
+                  actionLabel="Upload Resume"
+                  actionHref="/upload-resume"
+                  icon="upload"
+                />
+              </div>
+            )
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm text-muted-foreground">
+                  Showing {filteredProfiles.length} {filteredProfiles.length === 1 ? "profile" : "profiles"}
+                  {searchQuery && ` for "${searchQuery}"`}
+                </p>
+                {searchQuery && (
+                  <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")} className="text-xs h-8">
+                    Clear search
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProfiles.map((profile) => (
+                  <ProfileCard key={profile.filename} profile={profile} />
+                ))}
+              </div>
+            </>
           )}
         </div>
       </motion.div>
     </div>
   )
 }
+

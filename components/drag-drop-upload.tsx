@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
-import { Upload, FileText, X, FileUp } from "lucide-react"
+import { Upload, FileText, X, FileUp, CloudUpload, CheckCircle, AlertCircle, Sparkles } from "lucide-react"
 import { s3Client, bucketName } from "@/AWSConfig"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 
@@ -17,16 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { collection, getDocs, doc, getDoc } from "firebase/firestore"
 import { db } from "@/FirebaseConfig"
 
+import { checkDuplicateResume } from "@/utils/firebase-helpers"
 import { useTheme } from "next-themes"
 
 // Add this type definition at the top of the file
-type AnalysisResult = {
-  skills: string[] // Changed from 'any' to string array
-  name: string
-  phone_number: string
-  email: string
-
-import { checkDuplicateResume } from "@/utils/firebase-helpers"
 
 // Add this type definition at the top of the file
 type AnalysisResult = {
