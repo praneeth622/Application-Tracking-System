@@ -11,7 +11,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyDZFETF1t_h5CfT_xBt94U3WmQfWzNObo8",
   authDomain: "ats-checker-ba0fd.firebaseapp.com",
   projectId: "ats-checker-ba0fd",
-  storageBucket: "ats-checker-ba0fd.firebasestorage.app",
+  storageBucket: "ats-checker-v1",
   messagingSenderId: "529592921344",
   appId: "1:529592921344:web:768b73e4c20eb1d8d697e5",
   measurementId: "G-SYCJ0E2774"
