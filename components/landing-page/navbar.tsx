@@ -124,7 +124,7 @@ export function Navbar() {
               )}
             </Link>
           ))}
-          <Link href="#" className="text-white hover:text-opacity-80 transition-colors font-medium">
+          <Link href="/login" className="text-white hover:text-opacity-80 transition-colors font-medium">
             Login
           </Link>
 
