@@ -52,6 +52,19 @@ export default function CreateVendorPage() {
       return
     }
 
+    // Check if any field is empty
+    const requiredFields: (keyof VendorFormData)[] = ['name', 'contact_person', 'email', 'phone', 'address', 'state', 'country'];
+    const emptyFields = requiredFields.filter(field => !formData[field].trim());
+    
+    if (emptyFields.length > 0) {
+      toast({
+        title: "Validation Error",
+        description: `Please fill in all required fields: ${emptyFields.join(', ')}`,
+        variant: "destructive",
+      })
+      return;
+    }
+
     try {
       const vendorId = uuidv4()
       const vendorData = {
