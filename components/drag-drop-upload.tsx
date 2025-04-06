@@ -4,9 +4,11 @@ import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { FileText, X, FileUp, CheckCircle, AlertCircle, CloudUpload, Sparkles } from "lucide-react"
-import { storage } from "@/FirebaseConfig"
-import { ref, uploadBytesResumable } from "firebase/storage"
+
+import { Upload, FileText, X, FileUp } from "lucide-react"
+import { s3Client, bucketName } from "@/AWSConfig"
+import { PutObjectCommand } from "@aws-sdk/client-s3"
+
 import { useAuth } from "@/context/auth-context"
 import { generateUUID } from "@/utils/generate-id"
 import { useToast } from "@/hooks/use-toast"
@@ -14,6 +16,7 @@ import { analyzeResume } from "@/utils/analyze-resume"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { collection, getDocs, doc, getDoc } from "firebase/firestore"
 import { db } from "@/FirebaseConfig"
+
 import { useTheme } from "next-themes"
 
 // Add this type definition at the top of the file
@@ -22,6 +25,17 @@ type AnalysisResult = {
   name: string
   phone_number: string
   email: string
+
+import { checkDuplicateResume } from "@/utils/firebase-helpers"
+
+// Add this type definition at the top of the file
+type AnalysisResult = {
+  // Type definitions unchanged...
+  skills: string[];
+  name: string;
+  phone_number: string;
+  email: string;
+
   social_profile_links: {
     linkedin?: string
     github?: string
@@ -109,7 +123,9 @@ export function DragDropUpload() {
   // Replace the existing fetchVendors function in your useEffect
   useEffect(() => {
     const fetchVendors = async () => {
+
       setIsLoadingVendors(true)
+
       try {
         const vendorsList: Vendor[] = []
 
@@ -166,6 +182,7 @@ export function DragDropUpload() {
     fetchVendors()
   }, [])
 
+  // Event handlers unchanged
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -201,20 +218,24 @@ export function DragDropUpload() {
     }
   }
 
+  // Updated to use AWS S3 instead of Firebase Storage
   const validateAndUploadFile = async (file: File) => {
     try {
       if (!user) {
         throw new Error("User not authenticated")
       }
+      console.log("Validating and uploading file:", file);
 
       setFile(file)
       setUploadStatus("uploading")
 
       // Generate file hash for duplicate check
-      const fileBuffer = await file.arrayBuffer()
-      const hashBuffer = await crypto.subtle.digest("SHA-256", fileBuffer)
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      const fileHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+
+      const fileBuffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      console .log("File hash:", fileHash);
 
       // Check for duplicates
       const isDuplicate = await checkDuplicateResume(user.uid, fileHash)
@@ -227,75 +248,83 @@ export function DragDropUpload() {
         })
         return
       }
+      console.log("File is not a duplicate, proceeding with upload...");
 
-      const resumeId = generateUUID()
-      const fileExtension = file.name.split(".").pop()
-      const storageRef = ref(storage, `resumes/${user.uid}/${resumeId}.${fileExtension}`)
 
-      const uploadTask = uploadBytesResumable(storageRef, file)
+      const resumeId = generateUUID();
+      const fileExtension = file.name.split('.').pop();
+      const s3Key = `resumes/${user.uid}/${resumeId}.${fileExtension}`;
 
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-          setUploadProgress(progress)
-        },
-        (error) => {
-          console.error("Upload error:", error)
-          setUploadStatus("error")
-          toast({
-            title: "Upload failed",
-            description: "There was an error uploading your file",
-            variant: "destructive",
-          })
-        },
-        async () => {
-          try {
-            setIsAnalyzing(true)
+      // Create S3 upload parameters
+      const uploadParams = {
+        Bucket: bucketName,
+        Key: s3Key,
+        Body: new Uint8Array(fileBuffer),
+        ContentType: file.type,
+      };
+      console.log("Uploading to S3 with key:", s3Key);
+      console.log("uplaod details:", uploadParams);
 
-            // Get vendor details for the selected vendor, but only pass ID and name to analyzeResume
-            const selectedVendorObj =
-              selectedVendor === "no-vendor" ? null : vendors.find((v) => v.id === selectedVendor)
+      // Track upload progress manually
+      let uploadStartTime = Date.now();
+      let uploadTracker = setInterval(() => {
+        // Simulate progress (actual S3 client doesn't provide real-time progress)
+        const elapsed = Date.now() - uploadStartTime;
+        const estimatedTotalTime = file.size / 50000; // Rough estimate based on file size
+        let progress = Math.min(95, (elapsed / estimatedTotalTime) * 100);
+        setUploadProgress(progress);
+      }, 200);
 
-            // Pass only vendor ID and name to analyze resume
-            const analysisResult = await analyzeResume(
-              file,
-              user.uid,
-              user.email!,
-              selectedVendor === "no-vendor" ? null : selectedVendor,
-              selectedVendorObj?.name || null,
-            )
+      try {
+        // Upload to S3
+        await s3Client.send(new PutObjectCommand(uploadParams));
+        
+        // Clear progress tracker and set to 100%
+        clearInterval(uploadTracker);
+        setUploadProgress(100);
+        
+        // Start analysis
+        setIsAnalyzing(true);
+        
+        // Get vendor details for the selected vendor, but only pass ID and name to analyzeResume
+        const selectedVendorObj = selectedVendor === "no-vendor" ? null : 
+          vendors.find(v => v.id === selectedVendor);
+        
+        // Pass only vendor ID and name to analyze resume
+        const analysisResult = await analyzeResume(
+          file, 
+          user.uid, 
+          user.email!, 
+          selectedVendor === "no-vendor" ? null : selectedVendor,
+          selectedVendorObj?.name || null
+        );
 
-            // Store the analysis result in state
-            setAnalysisResult(analysisResult.analysis)
-            setUploadStatus("success")
-
-            toast({
-              title: "Success",
-              description: "Resume analyzed" + (selectedVendorObj ? ` and tagged with ${selectedVendorObj.name}` : ""),
-            })
-          } catch (error: unknown) {
-            const firebaseError = error as FirebaseError
-            console.error("Analysis error:", firebaseError)
-            setAnalysisError(firebaseError.message)
-            toast({
-              title: "Analysis failed",
-              description: "There was an error analyzing your resume",
-              variant: "destructive",
-            })
-          } finally {
-            setIsAnalyzing(false)
-          }
-        },
-      )
-    } catch (error) {
-      console.error("Error in validateAndUploadFile:", error)
-      setUploadStatus("error")
+        // Store the analysis result in state
+        setAnalysisResult(analysisResult.analysis);
+        setUploadStatus("success");
+        
+        toast({
+          title: "Success",
+          description: "Resume analyzed" + (selectedVendorObj ? ` and tagged with ${selectedVendorObj.name}` : ""),
+        });
+      } catch (error) {
+        clearInterval(uploadTracker);
+        throw error;
+      }
+    } catch (error: unknown) {
+      console.error('Error in validateAndUploadFile:', error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      setAnalysisError(errorMessage);
+      setUploadStatus("error");
       toast({
         title: "Upload failed",
         description: "There was an error uploading your file",
         variant: "destructive",
-      })
+
+      });
+    } finally {
+      setIsAnalyzing(false);
+
     }
   }
 
@@ -311,6 +340,7 @@ export function DragDropUpload() {
     }
   }
 
+  // UI remains unchanged
   return (
     <div className="w-full">
       <AnimatePresence mode="wait">
@@ -549,6 +579,7 @@ export function DragDropUpload() {
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-6 p-5 rounded-xl bg-background/50 backdrop-blur-sm border border-violet-500/20"
                 >
+
                   <div className="flex items-center mb-4">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500/20 to-blue-500/20 flex items-center justify-center mr-4">
                       <CheckCircle className="w-5 h-5 text-violet-500" />
@@ -589,6 +620,7 @@ export function DragDropUpload() {
                         </div>
                       )}
                     </div>
+
                   </div>
                 </motion.div>
               )}
@@ -634,10 +666,4 @@ export function DragDropUpload() {
   )
 }
 
-// Mock implementation of checkDuplicateResume
-async function checkDuplicateResume(uid: string, fileHash: string): Promise<boolean> {
-  // Replace this with actual logic to check for duplicates in your database or storage
-  console.log(`Checking for duplicate resume for user: ${uid}, hash: ${fileHash}`)
-  return false // Assume no duplicate for now
-}
 

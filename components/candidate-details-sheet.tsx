@@ -87,11 +87,11 @@ export function CandidateDetailsSheet({
 
     // Set up real-time listener for candidate updates
     const unsubscribe = onSnapshot(
-      doc(db, "jobs", jobId, "relevant_profiles", "profiles"),
+      doc(db, "jobs", jobId, "resumes", "details"),
       (doc) => {
         if (doc.exists()) {
           const data = doc.data()
-          const updatedCandidate = data.candidates?.find(
+          const updatedCandidate = data.relevant_candidates?.find(
             (c: Candidate) => c.filename === initialCandidate.filename
           )
           if (updatedCandidate) {

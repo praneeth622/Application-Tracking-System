@@ -43,6 +43,12 @@ interface Job {
     last_modified_by: string
   }
   assigned_recruiters?: string[]
+  candidateDetails?: {
+    relevant_candidates: any[]
+    updated_at: Date
+    total_matches: number
+    status: string
+  }
 }
 
 export default function JobPage() {
@@ -69,6 +75,21 @@ export default function JobPage() {
           const jobDataRef = doc(db, "jobs", jobDoc.id, "data", "details")
           const jobDataSnap = await getDoc(jobDataRef)
           
+          // Fetch candidate details from the resumes/details collection
+          const candidateDetailsRef = doc(db, "jobs", jobDoc.id, "resumes", "details")
+          const candidateDetailsSnap = await getDoc(candidateDetailsRef)
+          let candidateDetails = undefined
+          
+          if (candidateDetailsSnap.exists()) {
+            const detailsData = candidateDetailsSnap.data()
+            candidateDetails = {
+              relevant_candidates: detailsData.relevant_candidates || [],
+              updated_at: detailsData.updated_at?.toDate() || new Date(),
+              total_matches: detailsData.total_matches || 0,
+              status: detailsData.status || "pending"
+            }
+          }
+          
           if (jobDataSnap.exists()) {
             const data = jobDataSnap.data()
             fetchedJobs.push({
@@ -93,7 +114,8 @@ export default function JobPage() {
                 created_by: '',
                 last_modified_by: ''
               },
-              assigned_recruiters: data.assigned_recruiters || []
+              assigned_recruiters: data.assigned_recruiters || [],
+              candidateDetails: candidateDetails
             })
           }
         }
