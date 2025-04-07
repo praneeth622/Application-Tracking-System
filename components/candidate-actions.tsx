@@ -33,19 +33,19 @@ export function CandidateActions({
     try {
       const batch = writeBatch(db);
       
-      // Get reference to relevant_profiles document
-      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
-      const profilesDoc = await getDoc(relevantProfilesRef);
+      // Get reference to primary source: resumes/details document
+      const resumesDetailsRef = doc(db, "jobs", jobId, "resumes", "details");
+      const resumesDetailsDoc = await getDoc(resumesDetailsRef);
       
-      if (!profilesDoc.exists()) {
-        throw new Error("Profiles document not found");
+      if (!resumesDetailsDoc.exists()) {
+        throw new Error("Resumes details document not found");
       }
 
-      const currentData = profilesDoc.data();
+      const currentData = resumesDetailsDoc.data();
       const timestamp = new Date().toISOString();
-
+      
       // Update the candidate's status and tracking info
-      const updatedCandidates = currentData.candidates.map((c: Candidate) => {
+      const updatedCandidates = currentData.relevant_candidates.map((c: Candidate) => {
         if (c.filename === candidate.filename) {
           return {
             ...c,
@@ -71,15 +71,48 @@ export function CandidateActions({
       });
 
       // Update the document with new data
-      batch.update(relevantProfilesRef, {
-        candidates: updatedCandidates,
+      batch.update(resumesDetailsRef, {
+        relevant_candidates: updatedCandidates,
         'metadata.lastUpdated': serverTimestamp(),
         [`statusCounts.${status}`]: increment(1),
-        // Decrement previous status count if it exists
-        ...(candidate.tracking?.status && {
-          [`statusCounts.${candidate.tracking.status}`]: increment(-1)
-        })
       });
+      
+      // Also update the old location for backward compatibility
+      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
+      const profilesDoc = await getDoc(relevantProfilesRef);
+      
+      if (profilesDoc.exists()) {
+        const oldData = profilesDoc.data();
+        const updatedOldCandidates = oldData.candidates?.map((c: Candidate) => {
+          if (c.filename === candidate.filename) {
+            return {
+              ...c,
+              tracking: {
+                ...c.tracking,
+                status,
+                statusHistory: [
+                  ...(c.tracking?.statusHistory || []),
+                  {
+                    status,
+                    timestamp,
+                    updatedBy: user?.email || 'unknown',
+                    ...additionalData
+                  }
+                ],
+                lastUpdated: timestamp,
+                updatedBy: user?.email || 'unknown',
+                ...additionalData
+              }
+            };
+          }
+          return c;
+        });
+        
+        batch.update(relevantProfilesRef, {
+          candidates: updatedOldCandidates,
+          'metadata.lastUpdated': serverTimestamp()
+        });
+      }
 
       await batch.commit();
       onUpdate();

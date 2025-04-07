@@ -1,118 +1,104 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
+// Update the initialization with the correct API version
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
 
-export async function analyzeMatch(jobData: any, resumeData: any) {
+// Update the model name to use the current version
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+// Replace any usage of "gemini-pro" with "gemini-1.5-pro" elsewhere in the file
+export async function analyzeMatch(job: any, resume: any) {
   try {
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-pro",
-      generationConfig: {
-        temperature: 0.7,
-        topP: 1,
-        topK: 1,
-        maxOutputTokens: 2048,
-      },
-    });
-
-    const prompt = `As an IT recruitment specialist, analyze the match between this job and candidate. Provide a JSON response (without any markdown formatting or code blocks) containing:
-    {
-      "matchPercentage": number between 0-100,
-      "matchingSkills": array of matching skills,
-      "missingRequirements": array of missing requirements,
-      "experienceMatch": boolean,
-      "educationMatch": boolean,
-      "overallAssessment": string
-    }
-
-    Job Details:
-    Title: ${jobData.title}
-    Description: ${jobData.description}
-    Required Skills: ${jobData.skills_required.join(', ')}
-    Experience Required: ${jobData.experience_required}
-    Requirements: ${jobData.requirements.join(', ')}
-    
-    Candidate Resume:
-    Skills: ${resumeData.analysis.key_skills.join(', ')}
-    Experience: ${resumeData.analysis.work_experience_details?.map((exp: any) => exp.title).join(', ')}
-    Education: ${resumeData.analysis.education_details?.map((edu: { degree: string; major: string; }) => 
-      `${edu.degree} in ${edu.major}`).join(', ')}`;
+    const prompt = `
+      # Job Description and Resume Matching Analysis
+      
+      ## Job Details:
+      ${JSON.stringify(job, null, 2)}
+      
+      ## Resume:
+      ${JSON.stringify(resume, null, 2)}
+      
+      ## Task:
+      Analyze how well this resume matches the job description. Provide:
+      1. Match percentage (number between 0-100)
+      2. List of matching skills found in both job and resume
+      3. List of required skills/qualifications missing in the resume
+      4. Whether the candidate's experience level matches requirements (true/false)
+      5. Whether the candidate's education matches requirements (true/false)
+      6. A brief overall assessment of the candidate's fit
+      
+      ## Output Format (JSON):
+      {
+        "matchPercentage": 85,
+        "matchingSkills": ["skill1", "skill2"],
+        "missingRequirements": ["req1", "req2"],
+        "experienceMatch": true,
+        "educationMatch": true,
+        "overallAssessment": "This candidate is a strong match because..."
+      }
+    `;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const cleanResponse = response.text()
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim();
-    return JSON.parse(cleanResponse);
+    const text = response.text();
+    
+    // Extract JSON from the response
+    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || 
+                      text.match(/\{[\s\S]*\}/);
+                      
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[0].replace(/```json|```/g, '').trim();
+      return JSON.parse(jsonStr);
+    } else {
+      // Fallback for when JSON isn't properly formatted
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error("Failed to parse JSON response:", text);
+        return null;
+      }
+    }
   } catch (error) {
     console.error("Error in match analysis:", error);
     return null;
   }
 }
 
-interface ResumeAnalysis {
-  filename: string;
-  matchPercentage: number;
-  matchingSkills: string[];
-  missingRequirements: string[];
-  experienceMatch: boolean;
-  educationMatch: boolean;
-  overallAssessment: string;
-  ranking: number;
-}
-
-export async function analyzeBatchMatches(jobData: any, resumesData: any[]): Promise<ResumeAnalysis[]> {
+/**
+ * Process a batch of resumes against a job description
+ * @param jobData Job details
+ * @param resumes Array of resume data
+ * @returns Array of resumes with match analysis
+ */
+export const analyzeBatchMatches = async (jobData: any, resumes: any[]) => {
   try {
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-pro",
-      generationConfig: {
-        temperature: 0.7,
-        topP: 1,
-        topK: 1,
-        maxOutputTokens: 2048,
-      },
-    });
-
-    const prompt = `As an IT recruitment specialist, analyze and rank these candidates for the job position. Provide a JSON array response (without any markdown formatting or code blocks) where each object contains:
-    {
-      "filename": "candidate's filename",
-      "matchPercentage": number between 0-100,
-      "matchingSkills": array of matching skills,
-      "missingRequirements": array of missing requirements,
-      "experienceMatch": boolean,
-      "educationMatch": boolean,
-      "overallAssessment": brief assessment string,
-      "ranking": number (1 being best match)
+    // Process resumes in batches to avoid rate limiting
+    const batchSize = 5; // Adjust based on your API limits
+    const results = [];
+    
+    for (let i = 0; i < resumes.length; i += batchSize) {
+      const batch = resumes.slice(i, i + batchSize);
+      const batchPromises = batch.map(resume => analyzeMatch(jobData, resume));
+      
+      // Wait for all resumes in this batch to be processed
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
     }
-
-    Sort the array by matchPercentage in descending order and only include candidates with a match percentage above 50%.
     
-    Job Details:
-    Title: ${jobData.title}
-    Description: ${jobData.description}
-    Required Skills: ${jobData.skills_required.join(', ')}
-    Experience Required: ${jobData.experience_required}
-    Requirements: ${jobData.requirements.join(', ')}
-    
-    Candidates:
-    ${resumesData.map((resume, index) => `
-    Candidate ${index + 1}:
-    ID: ${resume.filename}
-    Skills: ${resume.analysis.key_skills.join(', ')}
-    Experience: ${resume.analysis.work_experience_details?.map((exp: { title: string; }) => exp.title).join(', ')}
-    Education: ${resume.analysis.education_details?.map((edu: { degree: string; major: string; }) => 
-      `${edu.degree} in ${edu.major}`).join(', ')}
-    `).join('\n')}`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const cleanResponse = response.text()
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim();
-    return JSON.parse(cleanResponse);
+    return results;
   } catch (error) {
-    console.error("Error in batch analysis:", error);
-    return [];
+    console.error("Error in batch match analysis:", error);
+    // Return resumes with empty match analysis if batch processing fails
+    return resumes.map(resume => ({
+      ...resume,
+      matchAnalysis: {
+        matchPercentage: 0,
+        matchingSkills: [],
+        missingRequirements: ["Failed to analyze requirements"],
+        experienceMatch: false,
+        educationMatch: false,
+        overallAssessment: "Failed to analyze match due to an error."
+      }
+    }));
   }
-}
+};

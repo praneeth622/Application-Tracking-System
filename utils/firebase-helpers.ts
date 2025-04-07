@@ -1,6 +1,8 @@
-import { db, storage } from "@/FirebaseConfig";
+import { db } from "@/FirebaseConfig";
+import { s3Client, bucketName } from "@/AWSConfig";
 import { doc, updateDoc, getDoc, setDoc, arrayUnion } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
 
 export interface ResumeData {
@@ -43,10 +45,27 @@ export async function saveResumeToFirebase(
     // Generate unique filename
     const uniqueFilename = `${uuidv4()}_${file.name}`;
     
-    // Upload file to Firebase Storage
-    const storageRef = ref(storage, `resumes/${userId}/${uniqueFilename}`);
-    await uploadBytes(storageRef, file);
-    const filelink = await getDownloadURL(storageRef);
+    // Upload file to AWS S3
+    const s3Key = `resumes/${userId}/${uniqueFilename}`;
+    
+    // Create put command for S3
+    const uploadParams = {
+      Bucket: bucketName,
+      Key: s3Key,
+      Body: new Uint8Array(fileBuffer),
+      ContentType: file.type,
+    };
+    
+    // Upload to S3
+    await s3Client.send(new PutObjectCommand(uploadParams));
+    
+    // Generate a signed URL (valid for 7 days)
+    const getObjectCommand = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: s3Key
+    });
+    
+    const filelink = await getSignedUrl(s3Client, getObjectCommand, { expiresIn: 604800 }); // 7 days
 
     // Prepare resume data with simple vendor reference
     const resumeData: ResumeData = {
@@ -100,6 +119,8 @@ export async function checkDuplicateResume(
   
   if (docSnap.exists()) {
     const data = docSnap.data();
+    console.log("Checking for duplicate resume with hash:", fileHash);
+    console.log("Existing resumes:", data.resumes);
     return data.resumes?.some((resume: ResumeData) => 
       resume.fileHash === fileHash
     ) || false;
@@ -122,3 +143,4 @@ async function generateFileHash(file: File): Promise<string> {
     reader.readAsArrayBuffer(file);
   });
 }
+

@@ -1,13 +1,29 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useParams } from "next/navigation"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { collection, getDocs, doc, getDoc, writeBatch, onSnapshot } from "firebase/firestore"
+import { collection, getDocs, doc, getDoc, writeBatch, onSnapshot, setDoc, updateDoc } from "firebase/firestore"
 import { db } from "@/FirebaseConfig"
-import { ArrowLeft, LayoutGrid, List } from "lucide-react"
+import {
+  ArrowLeft,
+  LayoutGrid,
+  Grid3X3,
+  List,
+  Search,
+  Filter,
+  SlidersHorizontal,
+  User,
+  Briefcase,
+  GraduationCap,
+  Clock,
+  Mail,
+  Calendar,
+  DollarSign,
+  Building,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
@@ -18,6 +34,21 @@ import { HiringStagesBoard } from "@/components/hiring-stages-board"
 import { useHiringStages } from "@/store/hiring-stages"
 import { Input } from "@/components/ui/input"
 import { CandidateDetailsSheet } from "@/components/candidate-details-sheet"
+import { CandidateGridView } from "@/components/candidate-grid-view"
+import { Pagination } from "@/components/pagination"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Progress } from "@/components/ui/progress"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { filterDuplicateCandidates } from "@/utils/filter-duplicates"
 
 interface MatchAnalysis {
   matchPercentage: number
@@ -73,16 +104,16 @@ interface ResumeData {
   userEmail: string
 }
 
-export type CandidateStatus = 
-  | 'shortlisted'
-  | 'contacted'
-  | 'interested'
-  | 'not_interested'
-  | 'rate_confirmed'
-  | 'interview_scheduled'
-  | 'approved'
-  | 'disapproved'
-  | 'pending';
+export type CandidateStatus =
+  | "shortlisted"
+  | "contacted"
+  | "interested"
+  | "not_interested"
+  | "rate_confirmed"
+  | "interview_scheduled"
+  | "approved"
+  | "disapproved"
+  | "pending"
 
 interface AdditionalStatusData {
   rateConfirmed?: number
@@ -112,6 +143,9 @@ export interface CandidateTracking {
   additionalData?: AdditionalStatusData
 }
 
+// Number of candidates to show per page
+const CANDIDATES_PER_PAGE = 9
+
 export default function CandidatesPage() {
   const params = useParams()
   const jobId = params.jobId as string
@@ -123,104 +157,173 @@ export default function CandidatesPage() {
   const { user } = useAuth()
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
+  const [jobDetails, setJobDetails] = useState<any>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [sortBy, setSortBy] = useState<"match" | "name" | "date">("match")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+  const [duplicatesRemoved, setDuplicatesRemoved] = useState(0)
 
   const fetchResumes = async () => {
     try {
+      // First check if we have candidates in relevant_profiles
+      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
+      const storedProfilesDoc = await getDoc(relevantProfilesRef);
+      
+      if (storedProfilesDoc.exists() && storedProfilesDoc.data().candidates?.length > 0) {
+        console.log("Found existing candidates in relevant_profiles");
+        return storedProfilesDoc.data().candidates;
+      }
+
+      // Direct approach - try to get job data first
+      const jobRef = doc(db, "jobs", jobId);
+      const jobDoc = await getDoc(jobRef);
+      
+      if (jobDoc.exists() && jobDoc.data().resumes && Array.isArray(jobDoc.data().resumes)) {
+        console.log(`Found resumes directly in job document: ${jobDoc.data().resumes.length}`);
+        return jobDoc.data().resumes;
+      }
+      
+      // Try to get all users' resumes
+      let allResumes: ResumeData[] = [];
       const usersRef = collection(db, "users");
       const usersSnapshot = await getDocs(usersRef);
-      let allResumes: ResumeData[] = [];
-
+      console.log(`Found ${usersSnapshot.size} users to check for resumes`);
+      
       for (const userDoc of usersSnapshot.docs) {
         try {
-          const userResumesRef = doc(db, "users", userDoc.id, "resumes", "data");
+          const userId = userDoc.id;
+          const userResumesRef = doc(db, "users", userId, "resumes", "data");
+          console.log(`Checking resumes for user ${userId}`);
           const userResumesDoc = await getDoc(userResumesRef);
+          console.log(`User ${userId} resumes document exists:`, userResumesDoc.exists());
           
-          if (userResumesDoc.exists()) {
-            const userData = userResumesDoc.data();
-            if (userData.resumes && Array.isArray(userData.resumes)) {
-              const userResumes = userData.resumes.map((resume: Omit<ResumeData, 'userId' | 'userEmail'>) => ({
-                ...resume,
-                userId: userDoc.id,
-                userEmail: userData.user_emailid || 'No email'
-              }));
-              allResumes = [...allResumes, ...userResumes];
-            }
+          if (userResumesDoc.exists() && userResumesDoc.data().resumes) {
+            const resumes = userResumesDoc.data().resumes;
+            console.log(`Found ${resumes.length} resumes for user ${userId}`);
+            allResumes = [...allResumes, ...resumes];
           }
         } catch (error) {
           console.warn(`Failed to fetch resumes for user ${userDoc.id}:`, error);
           continue;
         }
       }
-
-      console.log(`Successfully fetched ${allResumes.length} resumes`);
-      return allResumes;
-
+      
+      console.log(`Total resumes found from all users: ${allResumes.length}`);
+      
+      // If we found resumes, return them
+      if (allResumes.length > 0) {
+        return allResumes;
+      }
+      
+      // If no resumes found from any approach, return empty array
+      return [];
     } catch (error) {
       console.error("Error in fetchResumes:", error);
-      throw new Error("Failed to fetch resumes");
+      // Return empty array instead of throwing error
+      return [];
     }
-  };
+  }
+
+  useEffect(() => {
+    const fetchJobDetails = async () => {
+      try {
+        const jobDetailsRef = doc(db, "jobs", jobId, "data", "details")
+        const jobDetailsDoc = await getDoc(jobDetailsRef)
+
+        if (jobDetailsDoc.exists()) {
+          setJobDetails(jobDetailsDoc.data())
+        }
+      } catch (error) {
+        console.error("Error fetching job details:", error)
+      }
+    }
+
+    fetchJobDetails()
+  }, [jobId])
 
   useEffect(() => {
     const analyzeCandidates = async () => {
       if (!user) {
-        toast.error("Please sign in to view candidates");
-        return;
+        toast.error("Please sign in to view candidates")
+        return
       }
 
-      setIsLoading(true);
-      setIsAnalyzing(true);
+      setIsLoading(true)
+      setIsAnalyzing(true)
 
       try {
+        // First check for existing analyzed candidates
         const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
         const storedProfilesDoc = await getDoc(relevantProfilesRef);
 
-        if (storedProfilesDoc.exists()) {
+        if (storedProfilesDoc.exists() && storedProfilesDoc.data().candidates?.length > 0) {
+          console.log("Found existing candidates in relevant_profiles");
           const data = storedProfilesDoc.data();
-          if (data.candidates?.length > 0) {
-            // Sort candidates by lastUpdated timestamp before setting state
-            const sortedCandidates = data.candidates.sort((a: Candidate, b: Candidate) => {
-              const dateA = a.tracking?.lastUpdated ? new Date(a.tracking.lastUpdated).getTime() : 0;
-              const dateB = b.tracking?.lastUpdated ? new Date(b.tracking.lastUpdated).getTime() : 0;
-              return dateB - dateA;
-            });
-            
-            setCandidates(sortedCandidates);
-            setIsAnalyzing(false);
-            setIsLoading(false);
-            return;
-          }
+
+          // Filter out duplicate candidates
+          const allCandidates = data.candidates
+          const uniqueCandidates = filterDuplicateCandidates(allCandidates)
+
+          // Track how many duplicates were removed
+          setDuplicatesRemoved(allCandidates.length - uniqueCandidates.length)
+
+          // Sort candidates by match percentage
+          const sortedCandidates = uniqueCandidates.sort((a: Candidate, b: Candidate) => {
+            return b.matchAnalysis.matchPercentage - a.matchAnalysis.matchPercentage
+          })
+
+          setCandidates(sortedCandidates)
+          setIsAnalyzing(false)
+          setIsLoading(false)
+          return
         }
 
+        // If no candidates found, fetch job details and resumes
         console.log("Performing new analysis");
         const jobDetailsRef = doc(db, "jobs", jobId, "data", "details");
         const jobDetailsDoc = await getDoc(jobDetailsRef);
-
+        
         if (!jobDetailsDoc.exists()) {
-          throw new Error("Job not found");
+          toast.error("Job not found");
+          setIsLoading(false);
+          setIsAnalyzing(false);
+          return;
         }
 
         const jobData = jobDetailsDoc.data();
+        console.log("Job data:", jobData);
+        
+        // Fetch resumes from all users
         const resumesData = await fetchResumes();
+        console.log(`Total resumes to analyze: ${resumesData.length}`);
 
         if (resumesData.length === 0) {
+          // CHANGED: Don't create sample data, just show a message
           toast.error("No resumes found in the system");
           setIsLoading(false);
           setIsAnalyzing(false);
           return;
         }
 
+        // Analyze all fetched resumes against job requirements
+        toast.info(`Analyzing ${resumesData.length} resumes for matching candidates...`);
         const analysisResults = await analyzeBatchMatches(jobData, resumesData);
 
         if (!analysisResults || analysisResults.length === 0) {
           toast.error("No matching candidates found");
+          console.log("No matching candidates found");
+          setIsLoading(false);
+          setIsAnalyzing(false);
           return;
         }
 
+        console.log(`Found ${analysisResults.length} potential matches`);
+        
+        // Filter for candidates with > 50% match and map to Candidate structure
         const matchedCandidates = analysisResults
-          .filter(result => result.matchPercentage > 50)
-          .map(result => {
-            const resumeData = resumesData.find((r: ResumeData) => r.filename === result.filename);
+          .filter((result) => result.matchPercentage > 50)
+          .map((result) => {
+            const resumeData = resumesData.find((r: ResumeData) => r.filename === result.filename)
             return {
               filename: result.filename,
               name: resumeData?.analysis.name || "Unknown",
@@ -231,109 +334,343 @@ export default function CandidatesPage() {
                 missingRequirements: result.missingRequirements || [],
                 experienceMatch: result.experienceMatch || false,
                 educationMatch: result.educationMatch || false,
-                overallAssessment: result.overallAssessment || ""
+                overallAssessment: result.overallAssessment || "",
               },
               analysis: {
                 key_skills: resumeData?.analysis.key_skills || [],
                 education_details: resumeData?.analysis.education_details || [],
-                work_experience_details: resumeData?.analysis.work_experience_details || []
-              }
-            } as Candidate;
+                work_experience_details: resumeData?.analysis.work_experience_details || [],
+              },
+            } as Candidate
+          })
+
+        console.log(`${matchedCandidates.length} candidates matched with > 50% match rate`);
+        
+        // Filter out duplicate candidates
+        const uniqueCandidates = filterDuplicateCandidates(matchedCandidates)
+        console.log(`${uniqueCandidates.length} unique candidates after removing duplicates`);
+
+        // Track how many duplicates were removed
+        setDuplicatesRemoved(matchedCandidates.length - uniqueCandidates.length)
+
+        try {
+          // Update relevant_profiles collection
+          await setDoc(relevantProfilesRef, {
+            candidates: uniqueCandidates,
+            metadata: {
+              analyzed_at: new Date(),
+              analyzed_by: user.email,
+              total_candidates: uniqueCandidates.length,
+              total_resumes_analyzed: resumesData.length,
+              job_id: jobId,
+              lastUpdated: new Date()
+            }
           });
+          
+          toast.success(`Found ${uniqueCandidates.length} matching candidates`);
+        } catch (error) {
+          console.error("Error saving candidates to Firestore:", error);
+          toast.error("Failed to save analysis results, but showing matches anyway");
+          // Continue with UI update even if saving fails
+        }
 
-        const batch = writeBatch(db);
-
-        const jobResumesRef = doc(db, "jobs", jobId, "resumes", "details");
-        batch.set(jobResumesRef, {
-          relevant_candidates: matchedCandidates,
-          updated_at: new Date(),
-          total_matches: matchedCandidates.length,
-          status: "analyzed"
-        });
-
-        batch.set(relevantProfilesRef, {
-          candidates: matchedCandidates,
-          metadata: {
-            analyzed_at: new Date(),
-            analyzed_by: user.email,
-            total_candidates: matchedCandidates.length,
-            total_resumes_analyzed: resumesData.length,
-            job_id: jobId
-          }
-        });
-
-        await batch.commit();
-        setCandidates(matchedCandidates);
-
+        setCandidates(uniqueCandidates)
       } catch (error) {
-        console.error("Error in analyzeCandidates:", error);
-        const errorMessage = error instanceof Error ? error.message : "Failed to analyze candidates";
-        toast.error(`Analysis failed: ${errorMessage}`);
+        console.error("Error in analyzeCandidates:", error)
+        const errorMessage = error instanceof Error ? error.message : "Failed to analyze candidates"
+        toast.error(`Analysis failed: ${errorMessage}`)
       } finally {
-        setIsLoading(false);
-        setIsAnalyzing(false);
+        setIsLoading(false)
+        setIsAnalyzing(false)
       }
-    };
+    }
 
-    analyzeCandidates();
-  }, [jobId, user]);
+    analyzeCandidates()
+  }, [jobId, user])
 
   const refreshCandidates = async () => {
     try {
-      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
-      const storedProfilesDoc = await getDoc(relevantProfilesRef);
+      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles")
+      const storedProfilesDoc = await getDoc(relevantProfilesRef)
 
       if (storedProfilesDoc.exists()) {
-        const data = storedProfilesDoc.data();
+        const data = storedProfilesDoc.data()
         if (data.candidates?.length > 0) {
-          setCandidates(data.candidates);
+          // Filter out duplicate candidates
+          const allCandidates = data.candidates
+          const uniqueCandidates = filterDuplicateCandidates(allCandidates)
+
+          // Track how many duplicates were removed
+          setDuplicatesRemoved(allCandidates.length - uniqueCandidates.length)
+
+          setCandidates(uniqueCandidates)
         }
       }
     } catch (error) {
-      console.error("Error refreshing candidates:", error);
-      toast.error("Failed to refresh candidates");
+      console.error("Error refreshing candidates:", error)
+      toast.error("Failed to refresh candidates")
     }
-  };
+  }
 
-
-  const { 
-    currentView, 
-    setCurrentView,
-    statusFilter,
-    searchQuery,
-    setSearchQuery
-  } = useHiringStages()
+  const { currentView, setCurrentView, statusFilter, searchQuery, setSearchQuery } = useHiringStages()
 
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId) return
 
-    const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
-    
-    const unsubscribe = onSnapshot(relevantProfilesRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        if (data.candidates) {
-          const filteredCandidates = statusFilter === 'all' 
-            ? data.candidates 
-            : data.candidates.filter((c: Candidate) => c.tracking?.status === statusFilter);
-          
-          const sortedCandidates = filteredCandidates.sort((a: Candidate, b: Candidate) => {
-            const dateA = a.tracking?.lastUpdated ? new Date(a.tracking.lastUpdated).getTime() : 0;
-            const dateB = b.tracking?.lastUpdated ? new Date(b.tracking.lastUpdated).getTime() : 0;
-            return dateB - dateA;
-          });
+    const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles")
 
-          setCandidates(sortedCandidates);
+    const unsubscribe = onSnapshot(
+      relevantProfilesRef,
+      (doc) => {
+        if (doc.exists()) {
+          const data = doc.data()
+          if (data.candidates) {
+            // Filter by status if needed
+            const statusFilteredCandidates =
+              statusFilter === "all"
+                ? data.candidates
+                : data.candidates.filter((c: Candidate) => c.tracking?.status === statusFilter)
+
+            // Filter out duplicate candidates
+            const uniqueCandidates = filterDuplicateCandidates(statusFilteredCandidates)
+
+            // Track how many duplicates were removed
+            setDuplicatesRemoved(statusFilteredCandidates.length - uniqueCandidates.length)
+
+            setCandidates(uniqueCandidates)
+          }
         }
+      },
+      (error) => {
+        console.error("Error in real-time updates:", error)
+        toast.error("Failed to get real-time updates")
+      },
+    )
+
+    return () => unsubscribe()
+  }, [jobId, statusFilter])
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [statusFilter, searchQuery, sortBy, sortOrder])
+
+  // Filter and sort candidates
+  const filteredAndSortedCandidates = useMemo(() => {
+    // First filter by search query
+    const filtered = candidates.filter((candidate) => {
+      if (!searchQuery) return true
+
+      const query = searchQuery.toLowerCase()
+      return (
+        candidate.name?.toLowerCase().includes(query) ||
+        candidate.email?.toLowerCase().includes(query) ||
+        candidate.analysis.key_skills.some((skill) => skill && skill.toLowerCase().includes(query))
+      )
+    })
+
+    // Then sort
+    return [...filtered].sort((a, b) => {
+      let comparison = 0
+
+      switch (sortBy) {
+        case "match":
+          comparison = b.matchAnalysis.matchPercentage - a.matchAnalysis.matchPercentage
+          break
+        case "name":
+          comparison = a.name.localeCompare(b.name)
+          break
+        case "date":
+          const dateA = a.tracking?.lastUpdated ? new Date(a.tracking.lastUpdated).getTime() : 0
+          const dateB = b.tracking?.lastUpdated ? new Date(b.tracking.lastUpdated).getTime() : 0
+          comparison = dateB - dateA
+          break
       }
-    }, (error) => {
-      console.error("Error in real-time updates:", error);
-      toast.error("Failed to get real-time updates");
-    });
 
-    return () => unsubscribe();
-  }, [jobId, statusFilter]);
+      return sortOrder === "asc" ? -comparison : comparison
+    })
+  }, [candidates, searchQuery, sortBy, sortOrder])
 
+  // Paginate candidates
+  const paginatedCandidates = useMemo(() => {
+    const startIndex = (currentPage - 1) * CANDIDATES_PER_PAGE
+    return filteredAndSortedCandidates.slice(startIndex, startIndex + CANDIDATES_PER_PAGE)
+  }, [filteredAndSortedCandidates, currentPage])
+
+  // Calculate total pages
+  const totalPages = Math.max(1, Math.ceil(filteredAndSortedCandidates.length / CANDIDATES_PER_PAGE))
+
+  // Loading skeleton for candidate cards
+  const CandidateCardSkeleton = () => (
+    <div className="p-6 rounded-lg border animate-pulse">
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-12 w-12 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+        </div>
+        <Skeleton className="h-10 w-16 rounded-full" />
+      </div>
+      <div className="mt-4 space-y-3">
+        <Skeleton className="h-4 w-full" />
+        <div className="flex flex-wrap gap-2">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-6 w-16 rounded-full" />
+          ))}
+        </div>
+        <Skeleton className="h-4 w-3/4" />
+      </div>
+    </div>
+  )
+
+  // Empty state component
+  const EmptyState = () => (
+    <div className="text-center py-16 px-4">
+      <div className="bg-muted/30 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+        <User className="w-8 h-8 text-muted-foreground" />
+      </div>
+      <h3 className="text-xl font-semibold mb-2">No Candidates Found</h3>
+      <p className="text-muted-foreground max-w-md mx-auto mb-6">
+        {searchQuery || statusFilter !== "all"
+          ? "Try adjusting your filters or search query"
+          : "No matching candidates found for this job"}
+      </p>
+      <Button variant="outline" onClick={() => router.push("/job")}>
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Back to Jobs
+      </Button>
+    </div>
+  )
+
+  // Candidate card component for list view
+  const CandidateCard = ({ candidate }: { candidate: Candidate }) => (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.2 }}
+      className="rounded-lg border hover:border-primary hover:shadow-md transition-all cursor-pointer p-6"
+      onClick={() => setSelectedCandidate(candidate)}
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex items-start gap-4">
+          <Avatar className="h-12 w-12 border">
+            <AvatarFallback className="bg-primary/10 text-primary">
+              {candidate.name
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h3 className="text-xl font-semibold">{candidate.name}</h3>
+            <div className="flex items-center text-muted-foreground">
+              <Mail className="w-3.5 h-3.5 mr-1.5" />
+              {candidate.email}
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="text-2xl font-bold text-primary">{candidate.matchAnalysis.matchPercentage}%</div>
+                <div className="text-sm text-muted-foreground">Match Score</div>
+              </div>
+              <Progress value={candidate.matchAnalysis.matchPercentage} className="h-2 w-full max-w-xs" />
+            </div>
+          </div>
+        </div>
+
+        {candidate.tracking?.status && (
+          <Badge
+            variant={
+              candidate.tracking.status === "shortlisted" || candidate.tracking.status === "approved"
+                ? "default"
+                : candidate.tracking.status === "not_interested" || candidate.tracking.status === "disapproved"
+                  ? "destructive"
+                  : "secondary"
+            }
+            className="text-xs"
+          >
+            {candidate.tracking.status.replace("_", " ")}
+          </Badge>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <h4 className="font-medium mb-2">Matching Skills</h4>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {candidate.matchAnalysis.matchingSkills.slice(0, 5).map((skill, index) => (
+            <Badge
+              key={index}
+              variant="secondary"
+              className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50"
+            >
+              {skill}
+            </Badge>
+          ))}
+          {candidate.matchAnalysis.matchingSkills.length > 5 && (
+            <Badge variant="outline">+{candidate.matchAnalysis.matchingSkills.length - 5} more</Badge>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-4 text-sm">
+          <span
+            className={
+              candidate.matchAnalysis.experienceMatch
+                ? "text-green-600 flex items-center"
+                : "text-yellow-600 flex items-center"
+            }
+          >
+            <Briefcase className="w-3.5 h-3.5 mr-1" />
+            Experience: {candidate.matchAnalysis.experienceMatch ? "Match" : "Partial"}
+          </span>
+          <span
+            className={
+              candidate.matchAnalysis.educationMatch
+                ? "text-green-600 flex items-center"
+                : "text-yellow-600 flex items-center"
+            }
+          >
+            <GraduationCap className="w-3.5 h-3.5 mr-1" />
+            Education: {candidate.matchAnalysis.educationMatch ? "Match" : "Partial"}
+          </span>
+        </div>
+      </div>
+
+      {candidate.tracking && (
+        <div className="mt-4 pt-4 border-t text-sm text-muted-foreground space-y-1">
+          {candidate.tracking.rateConfirmed && (
+            <div className="flex items-center">
+              <DollarSign className="w-3.5 h-3.5 mr-1.5" />
+              Rate: ${candidate.tracking.rateConfirmed}/hr
+            </div>
+          )}
+          {candidate.tracking.interviewDate && (
+            <div className="flex items-center">
+              <Calendar className="w-3.5 h-3.5 mr-1.5" />
+              Interview: {format(new Date(candidate.tracking.interviewDate), "PPp")}
+            </div>
+          )}
+          <div className="flex items-center">
+            <Clock className="w-3.5 h-3.5 mr-1.5" />
+            Updated: {format(new Date(candidate.tracking.lastUpdated), "PP")}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  )
+
+  // Toggle sort order
+  const toggleSort = (type: "match" | "name" | "date") => {
+    if (sortBy === type) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+    } else {
+      setSortBy(type)
+      setSortOrder("desc")
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
@@ -349,168 +686,208 @@ export default function CandidatesPage() {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
         <div className="container mx-auto py-8 px-4 md:px-8">
-          <Button
-            variant="ghost"
-            className="mb-6"
-            onClick={() => router.back()}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
+          <Button variant="ghost" className="mb-6 group" onClick={() => router.back()}>
+            <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
             Back to Job Details
           </Button>
 
-          <h1 className="text-3xl font-bold mb-2">Relevant Candidates</h1>
-          <p className="text-muted-foreground mb-8">
-            Showing candidates matching the job requirements
-          </p>
+          {jobDetails && (
+            <Card className="mb-8 bg-gradient-to-r from-primary/5 to-transparent border-primary/20">
+              <CardContent className="p-6">
+                <div className="flex flex-col md:flex-row justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">{jobDetails.title}</h2>
+                    <div className="flex items-center text-muted-foreground mb-4">
+                      <Building className="w-4 h-4 mr-2" />
+                      {jobDetails.company} • {jobDetails.location}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                        {jobDetails.employment_type}
+                      </Badge>
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                        {jobDetails.experience_required}
+                      </Badge>
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                        {jobDetails.mode_of_work}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end justify-center">
+                    <div className="text-sm text-muted-foreground mb-1">Matching Candidates</div>
+                    <div className="text-3xl font-bold">{candidates.length}</div>
+                    {duplicatesRemoved > 0 && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {duplicatesRemoved} duplicate profile{duplicatesRemoved !== 1 ? "s" : ""} filtered out
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-          <div className="flex flex-col sm:flex-row gap-4 mb-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+            <h1 className="text-3xl font-bold">Relevant Candidates</h1>
             <div className="flex items-center gap-2">
               <Button
-                variant={currentView === 'list' ? 'default' : 'outline'}
+                variant={currentView === "list" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setCurrentView('list')}
+                onClick={() => setCurrentView("list")}
+                className="flex items-center"
               >
                 <List className="w-4 h-4 mr-2" />
                 List
               </Button>
               <Button
-                variant={currentView === 'board' ? 'default' : 'outline'}
+                variant={currentView === "grid" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setCurrentView('board')}
+                onClick={() => setCurrentView("grid")}
+                className="flex items-center"
+              >
+                <Grid3X3 className="w-4 h-4 mr-2" />
+                Grid
+              </Button>
+              <Button
+                variant={currentView === "board" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCurrentView("board")}
+                className="flex items-center"
               >
                 <LayoutGrid className="w-4 h-4 mr-2" />
                 Board
               </Button>
             </div>
+          </div>
 
-            <div className="flex-1">
-              <Input
-                placeholder="Search candidates..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="max-w-xs"
-              />
+          <div className="bg-card rounded-lg border p-4 mb-6">
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <div className="relative w-full sm:w-auto flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Search candidates..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex items-center">
+                      <Filter className="w-4 h-4 mr-2" />
+                      {statusFilter === "all" ? "All Status" : statusFilter.replace("_", " ")}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "all" })}>
+                      All Status
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "shortlisted" })}>
+                      Shortlisted
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "contacted" })}>
+                      Contacted
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "interested" })}>
+                      Interested
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "not_interested" })}>
+                      Not Interested
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "rate_confirmed" })}>
+                      Rate Confirmed
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "interview_scheduled" })}>
+                      Interview Scheduled
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "approved" })}>
+                      Approved
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "disapproved" })}>
+                      Disapproved
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => useHiringStages.setState({ statusFilter: "pending" })}>
+                      Pending
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex items-center">
+                      <SlidersHorizontal className="w-4 h-4 mr-2" />
+                      Sort by: {sortBy === "match" ? "Match" : sortBy === "name" ? "Name" : "Date"}
+                      {sortOrder === "asc" ? " (A-Z)" : " (Z-A)"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => toggleSort("match")}>
+                      Sort by Match {sortBy === "match" && (sortOrder === "desc" ? "↓" : "↑")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toggleSort("name")}>
+                      Sort by Name {sortBy === "name" && (sortOrder === "desc" ? "↓" : "↑")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toggleSort("date")}>
+                      Sort by Date {sortBy === "date" && (sortOrder === "desc" ? "↓" : "↑")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array(6)
+                .fill(0)
+                .map((_, index) => (
+                  <CandidateCardSkeleton key={index} />
+                ))}
             </div>
           ) : isAnalyzing ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
-              <p className="text-muted-foreground">
-                Analyzing candidates with AI...
+            <div className="text-center py-16">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Analyzing Candidates</h3>
+              <p className="text-muted-foreground max-w-md mx-auto">
+                Our AI is analyzing resumes to find the best matches for this job position
               </p>
             </div>
-          ) : candidates.length === 0 ? (
-            <div className="text-center py-12">
-              <h3 className="text-lg font-semibold mb-2">No Matching Candidates Found</h3>
-              <p className="text-muted-foreground">
-                Try adjusting the job requirements or check back later
-              </p>
-            </div>
+          ) : filteredAndSortedCandidates.length === 0 ? (
+            <EmptyState />
+          ) : currentView === "board" ? (
+            <HiringStagesBoard
+              candidates={filteredAndSortedCandidates}
+              jobId={jobId}
+              onCandidateUpdate={refreshCandidates}
+            />
           ) : (
-            currentView === 'list' ? (
-              <div className="grid gap-6">
-                {candidates
-                  .filter(candidate => 
-                    statusFilter === 'all' || candidate.tracking?.status === statusFilter
-                  )
-                  .map((candidate) => (
-                    <div
-                      key={candidate.filename}
-                      className="p-6 rounded-lg border hover:border-primary transition-all cursor-pointer"
-                      onClick={() => setSelectedCandidate(candidate)}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-4">
-                          <div>
-                            <h3 className="text-xl font-semibold">{candidate.name}</h3>
-                            <p className="text-muted-foreground">{candidate.email}</p>
-                          </div>
+            <>
+              <AnimatePresence>
+                {currentView === "list" ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {paginatedCandidates.map((candidate) => (
+                      <CandidateCard key={candidate.filename} candidate={candidate} />
+                    ))}
+                  </div>
+                ) : (
+                  <CandidateGridView candidates={paginatedCandidates} onSelectCandidate={setSelectedCandidate} />
+                )}
+              </AnimatePresence>
 
-                          <div>
-                            <h4 className="font-medium mb-2">Matching Skills</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {candidate.matchAnalysis.matchingSkills.map((skill, index) => (
-                                <span
-                                  key={index}
-                                  className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm"
-                                >
-                                  {skill}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
+              {/* Pagination */}
+              {filteredAndSortedCandidates.length > CANDIDATES_PER_PAGE && (
+                <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+              )}
 
-                          {candidate.matchAnalysis.missingRequirements.length > 0 && (
-                            <div>
-                              <h4 className="font-medium mb-2 text-yellow-600">Missing Requirements</h4>
-                              <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                                {candidate.matchAnalysis.missingRequirements.map((req, index) => (
-                                  <li key={index}>{req}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          <div className="text-sm text-muted-foreground">
-                            <p>{candidate.matchAnalysis.overallAssessment}</p>
-                          </div>
-                        </div>
-
-                        <div className="text-right space-y-2">
-                          <div className="text-3xl font-bold text-primary">
-                            {candidate.matchAnalysis.matchPercentage}%
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Match Score
-                          </div>
-                          <div className="flex flex-col gap-1 text-sm">
-                            <span className={candidate.matchAnalysis.experienceMatch ? 
-                              "text-green-600" : "text-yellow-600"}>
-                              Experience: {candidate.matchAnalysis.experienceMatch ? "✓" : "✗"}
-                            </span>
-                            <span className={candidate.matchAnalysis.educationMatch ? 
-                              "text-green-600" : "text-yellow-600"}>
-                              Education: {candidate.matchAnalysis.educationMatch ? "✓" : "✗"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-{/*                       
-                      <div className="mt-4 pt-4 border-t">
-                        <CandidateActions 
-                          candidate={candidate} 
-                          jobId={jobId}
-                          onUpdate={refreshCandidates} 
-                        />
-                      </div> */}
-                      
-                      {candidate.tracking && (
-                        <div className="mt-4 text-sm text-muted-foreground">
-                          <p>Status: {candidate.tracking.status}</p>
-                          {candidate.tracking.rateConfirmed && (
-                            <p>Rate: ${candidate.tracking.rateConfirmed}/hr</p>
-                          )}
-                          {candidate.tracking.interviewDate && (
-                            <p>Interview: {format(new Date(candidate.tracking.interviewDate), 'PPp')}</p>
-                          )}
-                          <p>Last updated: {format(new Date(candidate.tracking.lastUpdated), 'PPp')}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+              {/* Results summary */}
+              <div className="text-center text-sm text-muted-foreground mt-4">
+                Showing {paginatedCandidates.length} of {filteredAndSortedCandidates.length} candidates
+                {duplicatesRemoved > 0 && ` (${duplicatesRemoved} duplicates filtered out)`}
               </div>
-            ) : (
-              <HiringStagesBoard 
-                candidates={candidates} 
-                jobId={jobId}
-                onCandidateUpdate={refreshCandidates}
-              />
-            )
+            </>
           )}
 
           <CandidateDetailsSheet
@@ -525,3 +902,4 @@ export default function CandidatesPage() {
     </div>
   )
 }
+

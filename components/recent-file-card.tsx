@@ -1,112 +1,112 @@
 "use client"
 
-import { useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { FileText, MoreHorizontal, Download,  Trash2, Clock, ExternalLink } from "lucide-react"
+import { motion } from "framer-motion"
+import { FileText, ExternalLink, Star, Clock } from "lucide-react"
+import Link from "next/link"
 
 interface RecentFileCardProps {
-  fileName: string
+  filename: string
+  date: string
+  matchScore?: number
   fileSize: string
-  uploadDate: string
-  score: number
-  fileUrl: string
+  fileType: "pdf" | "docx" | "doc"
+  id: string
+  status?: "success" | "error" | "processing"
+  errorMessage?: string
 }
 
 export function RecentFileCard({
-  fileName,
+  filename,
+  date,
+  matchScore,
   fileSize,
-  uploadDate,
-  fileUrl
+  fileType,
+  id,
+  status = "success",
+  errorMessage,
 }: RecentFileCardProps) {
-  const [showActions, setShowActions] = useState(false)
-
-  const handleViewFile = () => {
-    if (fileUrl) {
-      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+  const getFileIcon = () => {
+    switch (fileType) {
+      case "pdf":
+        return <FileText className="w-5 h-5 text-primary" />
+      case "docx":
+      case "doc":
+        return <FileText className="w-5 h-5 text-primary" />
+      default:
+        return <FileText className="w-5 h-5 text-primary" />
     }
-  };
+  }
 
   return (
     <motion.div
-      className="glass-card p-4"
-      whileHover={{ y: -2, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
-      transition={{ duration: 0.2 }}
+      className={`glass-card hover:shadow-lg transition-all duration-300 border ${
+        status === "success"
+          ? "border-border"
+          : status === "error"
+            ? "border-red-500/20 bg-red-500/5"
+            : "border-yellow-500/20 bg-yellow-500/5"
+      }`}
+      whileHover={{ y: -5, scale: 1.02 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex items-center">
-          <motion.div
-            className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mr-3"
-            whileHover={{ scale: 1.1 }}
-            transition={{ duration: 0.2 }}
-          >
-            <FileText className="w-5 h-5 text-primary" />
-          </motion.div>
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mr-3">
+            {getFileIcon()}
+          </div>
           <div>
-            <h4 className="font-medium text-sm">{fileName}</h4>
+            <h3 className="font-medium">{filename}</h3>
             <div className="flex items-center text-xs text-muted-foreground">
-              <span>{fileSize}</span>
-              <span className="mx-2">•</span>
               <Clock className="w-3 h-3 mr-1" />
-              <span>{uploadDate}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center">
-          <div className="mr-4">
-            <div className="flex items-center">
-              <div className="text-xs">
-              </div>
-            </div>
-          </div>
-
-          <div className="relative">
-            <motion.button
-              className="p-1.5 rounded-md hover:bg-muted transition-colors"
-              onClick={() => setShowActions(!showActions)}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-            >
-              <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
-            </motion.button>
-
-            <AnimatePresence>
-              {showActions && (
-                <motion.div
-                  className="absolute right-0 top-full mt-1 bg-background border border-border rounded-lg shadow-lg py-1 z-10 w-36"
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <motion.button
-                    className="w-full text-left px-3 py-1.5 hover:bg-muted transition-colors flex items-center text-sm"
-                    whileHover={{ x: 2 }}
-                    onClick={handleViewFile}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    View File
-                  </motion.button>
-                  <motion.button
-                    className="w-full text-left px-3 py-1.5 hover:bg-muted transition-colors flex items-center text-sm"
-                    whileHover={{ x: 2 }}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download
-                  </motion.button>
-                  <motion.button
-                    className="w-full text-left px-3 py-1.5 hover:bg-muted transition-colors flex items-center text-sm text-red-500"
-                    whileHover={{ x: 2 }}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </motion.button>
-                </motion.div>
+              <span>{date}</span>
+              <span className="mx-2">•</span>
+              <span>{fileSize}</span>
+              {status !== "success" && (
+                <>
+                  <span className="mx-2">•</span>
+                  <span className={status === "error" ? "text-red-500" : "text-yellow-500"}>
+                    {status === "error" ? "Failed" : "Processing"}
+                  </span>
+                </>
               )}
-            </AnimatePresence>
+            </div>
           </div>
         </div>
+        {matchScore !== undefined && status === "success" && (
+          <div className="flex items-center">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+              <Star className="w-4 h-4 text-primary" />
+            </div>
+            <span className="ml-2 font-semibold">{matchScore}%</span>
+          </div>
+        )}
       </div>
+
+      {status === "error" && errorMessage && (
+        <div className="mb-3 text-sm text-red-500 bg-red-500/10 p-2 rounded">{errorMessage}</div>
+      )}
+
+      {status === "success" ? (
+        <Link href={`/profiles/${id}`}>
+          <motion.div
+            className="flex items-center justify-center w-full py-2 rounded-lg bg-muted hover:bg-primary/10 transition-colors text-sm font-medium"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            View Analysis
+            <ExternalLink className="w-3 h-3 ml-2" />
+          </motion.div>
+        </Link>
+      ) : status === "processing" ? (
+        <motion.div className="flex items-center justify-center w-full py-2 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm font-medium">
+          Processing...
+        </motion.div>
+      ) : (
+        <motion.div className="flex items-center justify-center w-full py-2 rounded-lg bg-red-500/10 text-red-500 text-sm font-medium">
+          Upload Failed
+        </motion.div>
+      )}
     </motion.div>
   )
 }

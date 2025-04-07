@@ -1,49 +1,30 @@
 "use client"
 
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Plus, Briefcase, Building, MapPin, DollarSign } from 'lucide-react'
-import { DashboardSidebar } from '@/components/dashboard-sidebar'
-import { useMediaQuery } from '@/hooks/use-media-query'
-import { useAuth } from '@/context/auth-context'
-import { Button } from '@/components/ui/button'
-import { useRouter } from 'next/navigation'
-import { collection, getDocs, doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore'
-import { db } from '@/FirebaseConfig'
-import { toast } from '@/components/ui/use-toast'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet"
-import { ShowRelevantCandidatesButton } from "@/components/show-relevant-candidates-button"
+import { useState, useEffect } from "react"
+import { AnimatePresence } from "framer-motion"
+import { Plus, Briefcase, Search, Filter, ArrowUpDown, List } from "lucide-react"
+import { DashboardSidebar } from "@/components/dashboard-sidebar"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { useAuth } from "@/context/auth-context"
+import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
+import { collection, getDocs, doc, getDoc } from "firebase/firestore"
+import { db } from "@/FirebaseConfig"
+import { toast } from "@/components/ui/use-toast"
+import { Input } from "@/components/ui/input"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Card, CardContent } from "@/components/ui/card"
+import { motion } from "framer-motion"
 
-interface Job {
-  job_id: string
-  title: string
-  company: string
-  location: string
-  employment_type: string
-  experience_required: string
-  salary_range: string
-  created_at: Date
-  description: string
-  status: string
-  total_applications: number
-  shortlisted: number
-  rejected: number
-  in_progress: number
-  benefits: string[]
-  requirements: string[]
-  skills_required: string[]
-  metadata: {
-    created_by: string
-    last_modified_by: string
-  }
-  assigned_recruiters?: string[]
-}
+// Import components
+import { JobCard } from "@/components/job/job-card"
+import { JobCardSkeleton } from "@/components/job/job-card-skeleton"
+import { EmptyState } from "@/components/job/empty-state"
+import { JobPagination } from "@/components/job/job-pagination"
+import { JobDetailsSheet } from "@/components/job/job-details-sheet"
+
+// Import types
+import type { Job } from "@/types/job"
 
 export default function JobPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -51,9 +32,20 @@ export default function JobPage() {
   const { user } = useAuth()
   const router = useRouter()
   const [jobs, setJobs] = useState<Job[]>([])
+  const [filteredJobs, setFilteredJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [jobsPerPage, setJobsPerPage] = useState(9)
+  const [paginatedJobs, setPaginatedJobs] = useState<Job[]>([])
+  const [totalPages, setTotalPages] = useState(1)
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -68,9 +60,50 @@ export default function JobPage() {
         for (const jobDoc of jobsSnapshot.docs) {
           const jobDataRef = doc(db, "jobs", jobDoc.id, "data", "details")
           const jobDataSnap = await getDoc(jobDataRef)
-          
+
           if (jobDataSnap.exists()) {
             const data = jobDataSnap.data()
+
+            // Fetch the relevant profiles to get accurate application stats
+            const applicationStats = {
+              total_applications: data.total_applications || 0,
+              shortlisted: data.shortlisted || 0,
+              rejected: data.rejected || 0,
+              in_progress: data.in_progress || 0,
+            }
+
+            try {
+              // Try to get more accurate stats from the relevant_profiles collection
+              const profilesRef = doc(db, "jobs", jobDoc.id, "relevant_profiles", "profiles")
+              const profilesSnap = await getDoc(profilesRef)
+
+              if (profilesSnap.exists() && profilesSnap.data().candidates) {
+                const candidates = profilesSnap.data().candidates
+                applicationStats.total_applications = candidates.length
+
+                // Count candidates by status
+                applicationStats.shortlisted = candidates.filter(
+                  (c: any) => c.tracking?.status === "shortlisted" || c.tracking?.status === "approved",
+                ).length
+
+                applicationStats.rejected = candidates.filter(
+                  (c: any) => c.tracking?.status === "disapproved" || c.tracking?.status === "not_interested",
+                ).length
+
+                applicationStats.in_progress = candidates.filter(
+                  (c: any) =>
+                    c.tracking?.status &&
+                    c.tracking.status !== "shortlisted" &&
+                    c.tracking.status !== "approved" &&
+                    c.tracking.status !== "disapproved" &&
+                    c.tracking.status !== "not_interested",
+                ).length
+              }
+            } catch (error) {
+              console.warn("Error fetching application stats:", error)
+              // Continue with the default stats
+            }
+
             fetchedJobs.push({
               job_id: jobDoc.id,
               title: data.title,
@@ -82,29 +115,37 @@ export default function JobPage() {
               created_at: data.created_at.toDate(),
               description: data.description,
               status: data.status,
-              total_applications: data.total_applications,
-              shortlisted: data.shortlisted,
-              rejected: data.rejected,
-              in_progress: data.in_progress,
+              total_applications: applicationStats.total_applications,
+              shortlisted: applicationStats.shortlisted,
+              rejected: applicationStats.rejected,
+              in_progress: applicationStats.in_progress,
               benefits: data.benefits || [],
               requirements: data.requirements || [],
               skills_required: data.skills_required || [],
-              metadata: data.metadata || {
-                created_by: '',
-                last_modified_by: ''
+              working_hours: data.working_hours,
+              mode_of_work: data.mode_of_work,
+              key_responsibilities: data.key_responsibilities,
+              nice_to_have_skills: data.nice_to_have_skills,
+              about_company: data.about_company,
+              deadline: data.deadline,
+              metadata: {
+                created_by: data.metadata?.created_by || "",
+                created_by_id: data.metadata?.created_by_id || "", // Store creator's ID
+                last_modified_by: data.metadata?.last_modified_by || "",
               },
-              assigned_recruiters: data.assigned_recruiters || []
+              assigned_recruiters: data.assigned_recruiters || [],
             })
           }
         }
 
         setJobs(fetchedJobs)
+        setFilteredJobs(fetchedJobs)
       } catch (error) {
         console.error("Error fetching jobs:", error)
         toast({
           title: "Error",
           description: "Failed to load jobs",
-          variant: "destructive"
+          variant: "destructive",
         })
       } finally {
         setIsLoading(false)
@@ -117,192 +158,74 @@ export default function JobPage() {
   useEffect(() => {
     if (isMobile) {
       setIsSidebarOpen(false)
+      setJobsPerPage(6)
+    } else {
+      setJobsPerPage(viewMode === "grid" ? 9 : 6)
     }
-  }, [isMobile])
+  }, [isMobile, viewMode])
+
+  useEffect(() => {
+    let result = [...jobs]
+
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(
+        (job) =>
+          job.title?.toLowerCase().includes(query) ||
+          job.company?.toLowerCase().includes(query) ||
+          job.location?.toLowerCase().includes(query) ||
+          job.skills_required?.some((skill) => skill && skill.toLowerCase().includes(query)),
+      )
+    }
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      result = result.filter((job) => job.status === statusFilter)
+    }
+
+    // Apply sort
+    result.sort((a, b) => {
+      if (sortOrder === "newest") {
+        return b.created_at.getTime() - a.created_at.getTime()
+      } else {
+        return a.created_at.getTime() - b.created_at.getTime()
+      }
+    })
+
+    setFilteredJobs(result)
+    setTotalPages(Math.ceil(result.length / jobsPerPage))
+    setCurrentPage(1) // Reset to first page when filters change
+  }, [jobs, searchQuery, statusFilter, sortOrder, jobsPerPage])
+
+  // Update paginated jobs when filtered jobs or pagination changes
+  useEffect(() => {
+    const startIndex = (currentPage - 1) * jobsPerPage
+    const endIndex = startIndex + jobsPerPage
+    setPaginatedJobs(filteredJobs.slice(startIndex, endIndex))
+  }, [filteredJobs, currentPage, jobsPerPage])
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   const handleJobClick = (job: Job) => {
     setSelectedJob(job)
     setIsSheetOpen(true)
   }
 
-  const JobDetailsSheet = () => {
-    const [isAssigning, setIsAssigning] = useState(false)
+  const handleJobUpdate = (updatedJob: Job) => {
+    setJobs((prevJobs) => prevJobs.map((job) => (job.job_id === updatedJob.job_id ? updatedJob : job)))
+  }
 
-    const handleAssignJob = async () => {
-      if (!selectedJob || !user) return
-
-      setIsAssigning(true)
-      try {
-        const jobDataRef = doc(db, "jobs", selectedJob.job_id, "data", "details")
-        await updateDoc(jobDataRef, {
-          assigned_recruiters: arrayUnion(user.uid),
-          updated_at: new Date(),
-          metadata: {
-            ...selectedJob.metadata,
-            last_modified_by: user.email
-          }
-        })
-
+  // Add job deletion function after the handleJobUpdate function
+  const handleJobDelete = (jobId: string) => {
+    setJobs((prevJobs) => prevJobs.filter((job) => job.job_id !== jobId))
         toast({
           title: "Success",
-          description: "Job assigned successfully!"
-        })
-        setIsSheetOpen(false)
-
-        // Refresh the jobs list
-        const updatedJobs = jobs.map(job =>
-          job.job_id === selectedJob.job_id
-            ? {
-              ...job,
-              assigned_recruiters: [...(job.assigned_recruiters || []), user.uid]
-            }
-            : job
-        )
-        setJobs(updatedJobs)
-
-      } catch (error) {
-        console.error("Error assigning job:", error)
-        toast({
-          title: "Error",
-          description: "Failed to assign job",
-          variant: "destructive"
-        })
-      } finally {
-        setIsAssigning(false)
-      }
-    }
-
-    if (!selectedJob) return null
-
-    return (
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-          <SheetHeader className="mb-6">
-            <SheetTitle className="text-2xl">{selectedJob.title}</SheetTitle>
-            <SheetDescription className="flex items-center text-base">
-              <Building className="w-4 h-4 mr-2" />
-              {selectedJob.company}
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="space-y-6">
-            {/* Basic Information */}
-            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
-              <div>
-                <p className="text-sm font-medium mb-1">Location</p>
-                <p className="text-muted-foreground">{selectedJob.location}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-1">Employment Type</p>
-                <p className="text-muted-foreground">{selectedJob.employment_type}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-1">Experience Required</p>
-                <p className="text-muted-foreground">{selectedJob.experience_required} years</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-1">Salary Range</p>
-                <p className="text-muted-foreground">{selectedJob.salary_range}</p>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <h3 className="text-lg font-semibold mb-2">Job Description</h3>
-              <p className="text-muted-foreground whitespace-pre-wrap">{selectedJob.description}</p>
-            </div>
-
-            {/* Requirements */}
-            <div>
-              <h3 className="text-lg font-semibold mb-2">Requirements</h3>
-              <ul className="list-disc pl-5 space-y-1">
-                {selectedJob.requirements.map((req, index) => (
-                  <li key={index} className="text-muted-foreground">{req}</li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Skills */}
-            {/* Skills */}
-            <div>
-              <h3 className="text-lg font-semibold mb-2">Required Skills</h3>
-              <div className="flex flex-wrap gap-2">
-                {selectedJob.skills_required.map((skill, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-primary/10 text-primary rounded-full text-sm"
-                  >
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Benefits */}
-            <div>
-              <h3 className="text-lg font-semibold mb-2">Benefits</h3>
-              <ul className="list-disc pl-5 space-y-1">
-                {selectedJob.benefits.map((benefit, index) => (
-                  <li key={index} className="text-muted-foreground">{benefit}</li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Application Stats */}
-            {/* <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-3">Application Statistics</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-sm font-medium">Total Applications</p>
-                  <p className="text-2xl">{selectedJob.total_applications}</p>
-                </div>
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <p className="text-sm font-medium text-green-700">Shortlisted</p>
-                  <p className="text-2xl text-green-700">{selectedJob.shortlisted}</p>
-                </div>
-                <div className="p-3 bg-yellow-50 rounded-lg">
-                  <p className="text-sm font-medium text-yellow-700">In Progress</p>
-                  <p className="text-2xl text-yellow-700">{selectedJob.in_progress}</p>
-                </div>
-                <div className="p-3 bg-red-50 rounded-lg">
-                  <p className="text-sm font-medium text-red-700">Rejected</p>
-                  <p className="text-2xl text-red-700">{selectedJob.rejected}</p>
-                </div>
-              </div>
-            </div> */}
-
-            {/* Assignment and Candidates Buttons */}
-            <div className="flex justify-end gap-4 border-t pt-4">
-              <ShowRelevantCandidatesButton jobId={selectedJob.job_id} />
-              <Button
-                onClick={handleAssignJob}
-                disabled={isAssigning || (selectedJob.assigned_recruiters || []).includes(user?.uid || '')}
-                className="w-full sm:w-auto"
-              >
-                {isAssigning ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                    Assigning...
-                  </>
-                ) : (selectedJob.assigned_recruiters || []).includes(user?.uid || '') ? (
-                  "Already Assigned"
-                ) : (
-                  "Assign to Recruiter"
-                )}
-              </Button>
-            </div>
-
-            {/* Metadata */}
-            <div className="text-sm text-muted-foreground border-t pt-4">
-              <p>Posted by: {selectedJob.metadata.created_by}</p>
-              <p>Created: {selectedJob.created_at.toLocaleString()}</p>
-              <p>Status: <span className={`px-2 py-1 rounded-full text-xs ${selectedJob.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                }`}>{selectedJob.status}</span></p>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-    )
+      description: "Job deleted successfully",
+    })
   }
 
   return (
@@ -319,99 +242,137 @@ export default function JobPage() {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
         <div className="container mx-auto py-8 px-4 md:px-8">
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div>
               <h1 className="text-3xl font-bold">Job Management</h1>
               <p className="text-muted-foreground">Create and manage your job postings</p>
             </div>
             <Button
-              onClick={() => router.push('/create-job')}
-              className="flex items-center"
+              onClick={() => router.push("/create-job")}
+              className="flex items-center bg-gradient-to-r from-primary to-primary/80 shadow-md hover:shadow-lg transition-all"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create New Job
             </Button>
           </div>
 
-          <div className="grid gap-6">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-              </div>
-            ) : jobs.length === 0 ? (
-              <div className="text-center py-12">
-                <h3 className="text-lg font-semibold mb-2">No Jobs Found</h3>
-                <p className="text-muted-foreground">
-                  Start by creating your first job posting
-                </p>
-              </div>
-            ) : (
-              jobs.map((job) => (
-                <div
-                  key={job.job_id}
-                  className="p-6 rounded-lg border hover:border-primary cursor-pointer transition-all"
-                  onClick={() => handleJobClick(job)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-semibold mb-2">{job.title}</h3>
-                      <div className="space-y-2">
-                        <div className="flex items-center text-muted-foreground">
-                          <Building className="w-4 h-4 mr-2" />
-                          {job.company}
-                        </div>
-                        <div className="flex items-center text-muted-foreground">
-                          <MapPin className="w-4 h-4 mr-2" />
-                          {job.location}
-                        </div>
-                        <div className="flex items-center text-muted-foreground">
-                          <Briefcase className="w-4 h-4 mr-2" />
-                          {job.employment_type} • {job.experience_required} days
-                        </div>
-                        <div className="flex items-center text-muted-foreground">
-                          <DollarSign className="w-4 h-4 mr-2" />
-                          {job.salary_range}
-                        </div>
-                      </div>
-
-                      {/* Add application stats */}
-                      <div className="mt-4 flex gap-4 text-sm">
-                        <span className="text-muted-foreground">
-                          Applications: {job.total_applications}
-                        </span>
-                        <span className="text-green-500">
-                          Shortlisted: {job.shortlisted}
-                        </span>
-                        <span className="text-yellow-500">
-                          In Progress: {job.in_progress}
-                        </span>
-                        <span className="text-red-500">
-                          Rejected: {job.rejected}
-                        </span>
-                      </div>
-                      {job.assigned_recruiters?.includes(user?.uid || '') && (
-                        <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 mb-2">
-                          Assigned to Recruiter
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="text-sm text-muted-foreground">
-                        Posted {job.created_at.toLocaleDateString()}
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs ${job.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                        {job.status}
-                      </span>
-                    </div>
-                  </div>
+          <Card className="mb-6">
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <div className="relative w-full sm:w-auto flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                  <Input
+                    placeholder="Search jobs..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
                 </div>
-              ))
-            )}
-          </div>
+
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="flex items-center">
+                        <Filter className="w-4 h-4 mr-2" />
+                        {statusFilter === "all" ? "All Status" : statusFilter === "active" ? "Active" : "Inactive"}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setStatusFilter("all")}>All Status</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setStatusFilter("active")}>Active</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setStatusFilter("inactive")}>Inactive</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="flex items-center">
+                        <ArrowUpDown className="w-4 h-4 mr-2" />
+                        {sortOrder === "newest" ? "Newest First" : "Oldest First"}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setSortOrder("newest")}>Newest First</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setSortOrder("oldest")}>Oldest First</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center"
+                    onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}
+                  >
+                    {viewMode === "grid" ? (
+                      <>
+                        <List className="w-4 h-4 mr-2" />
+                        List View
+                      </>
+                    ) : (
+                      <>
+                        <Briefcase className="w-4 h-4 mr-2" />
+                        Grid View
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array(6)
+                .fill(0)
+                .map((_, index) => (
+                  <JobCardSkeleton key={index} />
+                ))}
+            </div>
+          ) : filteredJobs.length === 0 ? (
+            <EmptyState
+              hasFilters={searchQuery !== "" || statusFilter !== "all"}
+              onCreateJob={() => router.push("/create-job")}
+            />
+          ) : (
+            <>
+              <AnimatePresence>
+                <div
+                  className={
+                    viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "grid gap-4"
+                  }
+                >
+                  {paginatedJobs.map((job) => (
+                    <JobCard
+                      key={job.job_id}
+                      job={job}
+                      viewMode={viewMode}
+                      onClick={handleJobClick}
+                      isAssignedToCurrentUser={(job.assigned_recruiters || []).includes(user?.uid || "")}
+                    />
+                  ))}
+                </div>
+              </AnimatePresence>
+
+              <JobPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                isMobile={isMobile}
+              />
+            </>
+          )}
         </div>
-        {selectedJob && <JobDetailsSheet />}
       </motion.div>
+
+      <JobDetailsSheet
+        job={selectedJob}
+        isOpen={isSheetOpen}
+        onOpenChange={setIsSheetOpen}
+        onJobUpdate={handleJobUpdate}
+        onDeleteJob={handleJobDelete}
+        currentUserId={user?.uid}
+      />
     </div>
   )
 }
+
