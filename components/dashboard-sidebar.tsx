@@ -5,6 +5,7 @@ import { useAuth } from "@/context/auth-context"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/FirebaseConfig"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   FileText,
@@ -19,10 +20,10 @@ import {
   ChevronLeft,
   ArrowRightToLine,
   Building,
-  Shield, // Add this import for admin icon
+  Shield,
 } from "lucide-react"
 import { useMobile } from "@/hooks/use-mobile"
-import { toast } from '@/components/ui/use-toast'
+import { toast } from "@/components/ui/use-toast"
 
 interface DashboardSidebarProps {
   isOpen: boolean
@@ -39,7 +40,8 @@ interface UserProfile {
 export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
   const { user } = useAuth()
   const isMobile = useMobile()
-  const [activeItem, setActiveItem] = useState("upload")
+  const pathname = usePathname()
+  const [activeItem, setActiveItem] = useState("")
   const [isHovering, setIsHovering] = useState<string | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -52,7 +54,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
         // Updated path to match your database structure
         const userProfileRef = doc(db, "users", user.uid, "userProfile", "data")
         const userProfileDoc = await getDoc(userProfileRef)
-        
+
         if (userProfileDoc.exists()) {
           const userData = userProfileDoc.data() as UserProfile
           setProfile(userData)
@@ -70,6 +72,27 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
 
     fetchUserProfile()
   }, [user])
+
+  useEffect(() => {
+    // Map paths to navigation items
+    if (pathname.includes("/upload-resume")) {
+      setActiveItem("upload")
+    } else if (pathname.includes("/profiles")) {
+      setActiveItem("profiles")
+    } else if (pathname.includes("/keyword-matcher")) {
+      setActiveItem("keywords")
+    } else if (pathname.includes("/job")) {
+      setActiveItem("jobs")
+    } else if (pathname.includes("/vendor")) {
+      setActiveItem("vendors")
+    } else if (pathname.includes("/admin")) {
+      setActiveItem("admin")
+    } else if (pathname.includes("/settings")) {
+      setActiveItem("settings")
+    } else if (pathname.includes("/help")) {
+      setActiveItem("help")
+    }
+  }, [pathname])
 
   const sidebarVariants = {
     expanded: {
@@ -328,11 +351,9 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
               </div>
               {(isOpen || isMobile) && (
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    {profile?.name || 'Loading...'}
-                  </div>
+                  <div className="text-sm font-medium truncate">{profile?.name || "Loading..."}</div>
                   <div className="text-xs text-muted-foreground truncate">
-                    {profile?.email || user?.email || 'Loading...'}
+                    {profile?.email || user?.email || "Loading..."}
                   </div>
                 </div>
               )}

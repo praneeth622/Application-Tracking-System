@@ -12,6 +12,18 @@ import { UserDropdown } from "@/components/user-dropdown"
 import Link from "next/link"
 import { useTheme } from "next-themes"
 import { RecentFileCard } from "@/components/recent-file-card"
+import { collection, query, getDocs, orderBy, limit } from "firebase/firestore"
+import { db } from "@/FirebaseConfig"
+
+// Define the RecentUpload interface
+interface RecentUpload {
+  id: string
+  filename: string
+  date: string
+  fileSize: string
+  fileType: "pdf" | "docx" | "doc"
+  matchScore?: number
+}
 
 export default function UploadResumePage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -19,6 +31,8 @@ export default function UploadResumePage() {
   const { user } = useAuth()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [recentUploads, setRecentUploads] = useState<RecentUpload[]>([])
+  const [isLoadingUploads, setIsLoadingUploads] = useState(true)
 
   // Ensure theme toggle only renders client-side
   useEffect(() => {
@@ -31,6 +45,95 @@ export default function UploadResumePage() {
       setIsSidebarOpen(false)
     }
   }, [isMobile])
+
+  // Fetch recent uploads from Firestore
+  useEffect(() => {
+    const fetchRecentUploads = async () => {
+      if (!user) return
+
+      setIsLoadingUploads(true)
+      try {
+        // Reference to the user's resumes document
+        const userResumesRef = collection(db, "users", user.uid, "resumes")
+
+        // Create a query to get the most recent uploads
+        const q = query(userResumesRef, orderBy("uploadedAt", "desc"), limit(5))
+
+        const querySnapshot = await getDocs(q)
+
+        const uploads: RecentUpload[] = []
+        querySnapshot.forEach((doc) => {
+          const data = doc.data()
+
+          // Format the date
+          const uploadDate = data.uploadedAt?.toDate() || new Date()
+          const formattedDate = formatDate(uploadDate)
+
+          // Format the file size (mock for now)
+          const fileSize = "250 KB" // This would ideally come from the actual file metadata
+
+          // Determine file type from filename
+          const filename = data.filename || "Unknown"
+          const fileExtension = filename.split(".").pop()?.toLowerCase()
+          const fileType = fileExtension === "pdf" ? "pdf" : fileExtension === "docx" ? "docx" : "doc"
+
+          // Calculate match score (mock for now)
+          const matchScore = Math.floor(Math.random() * 30) + 70 // Random score between 70-100
+
+          uploads.push({
+            id: doc.id,
+            filename,
+            date: formattedDate,
+            fileSize,
+            fileType: fileType as "pdf" | "docx" | "doc",
+            matchScore,
+          })
+        })
+
+        setRecentUploads(uploads)
+      } catch (error) {
+        console.error("Error fetching recent uploads:", error)
+      } finally {
+        setIsLoadingUploads(false)
+      }
+    }
+
+    if (user) {
+      fetchRecentUploads()
+    }
+  }, [user])
+
+  // Format date helper function
+  const formatDate = (date: Date): string => {
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+
+    // If less than a minute ago
+    if (diff < 60 * 1000) {
+      return "Just now"
+    }
+
+    // If less than an hour ago
+    if (diff < 60 * 60 * 1000) {
+      const minutes = Math.floor(diff / (60 * 1000))
+      return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`
+    }
+
+    // If today
+    if (date.toDateString() === now.toDateString()) {
+      return `Today, ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    }
+
+    // If yesterday
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Yesterday, ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    }
+
+    // Otherwise show full date
+    return date.toLocaleDateString() + ", " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
 
   // Animation variants
   const containerVariants = {
@@ -57,28 +160,8 @@ export default function UploadResumePage() {
     },
   }
 
-  // Mock data for recent uploads
-  const mockRecentUploads = [
-    {
-      id: "resume-1",
-      filename: "John_Doe_Resume.pdf",
-      date: "Today, 2:30 PM",
-      fileSize: "245 KB",
-      fileType: "pdf" as const,
-      matchScore: 85,
-    },
-    {
-      id: "resume-2",
-      filename: "Software_Engineer_CV.docx",
-      date: "Yesterday, 10:15 AM",
-      fileSize: "189 KB",
-      fileType: "docx" as const,
-      matchScore: 72,
-    },
-  ]
-
   // Determine if we have recent uploads to show
-  const hasRecentUploads = mockRecentUploads.length > 0
+  const hasRecentUploads = recentUploads.length > 0
 
   return (
     <ProtectedRoute>
@@ -206,9 +289,27 @@ export default function UploadResumePage() {
                     </Link>
                   </div>
 
-                  {hasRecentUploads ? (
+                  {isLoadingUploads ? (
+                    <div className="space-y-4">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="glass-card border border-border animate-pulse">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center">
+                              <div className="w-10 h-10 rounded-lg bg-primary/10"></div>
+                              <div className="ml-3">
+                                <div className="h-4 w-40 bg-muted rounded"></div>
+                                <div className="h-3 w-24 bg-muted rounded mt-2"></div>
+                              </div>
+                            </div>
+                            <div className="w-12 h-8 bg-muted rounded"></div>
+                          </div>
+                          <div className="h-8 w-full bg-muted rounded"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : hasRecentUploads ? (
                     <div className="grid gap-4">
-                      {mockRecentUploads.map((file) => (
+                      {recentUploads.map((file) => (
                         <RecentFileCard
                           key={file.id}
                           filename={file.filename}

@@ -143,3 +143,4 @@ async function generateFileHash(file: File): Promise<string> {
     reader.readAsArrayBuffer(file);
   });
 }
+

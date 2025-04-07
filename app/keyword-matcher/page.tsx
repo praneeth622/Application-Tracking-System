@@ -94,7 +94,38 @@ export default function KeywordMatcherPage() {
         if (userDoc.exists()) {
           const userData = userDoc.data()
           if (userData.resumes && Array.isArray(userData.resumes)) {
-            fetchedResumes.push(...userData.resumes)
+            // Ensure each resume has the required properties
+            const validResumes = userData.resumes.map((resume: Resume) => {
+              // Ensure analysis object exists
+              if (!resume.analysis) {
+                resume.analysis = {
+                  name: "Unknown",
+                  education_details: [],
+                  work_experience_details: [],
+                  key_skills: [],
+                  profile_summary: "",
+                }
+              }
+
+              // Ensure education_details array exists
+              if (!resume.analysis.education_details) {
+                resume.analysis.education_details = []
+              }
+
+              // Ensure work_experience_details array exists
+              if (!resume.analysis.work_experience_details) {
+                resume.analysis.work_experience_details = []
+              }
+
+              // Ensure key_skills array exists
+              if (!resume.analysis.key_skills) {
+                resume.analysis.key_skills = []
+              }
+
+              return resume
+            })
+
+            fetchedResumes.push(...validResumes)
 
             userData.resumes.forEach((resume: Resume) => {
               // Process key skills
@@ -177,7 +208,7 @@ export default function KeywordMatcherPage() {
     const matchesSkills =
       selectedKeywords.length === 0 ||
       selectedKeywords.every((keyword) =>
-        resume.analysis.key_skills.some((skill) => skill.toLowerCase().includes(keyword.toLowerCase())),
+        resume.analysis.key_skills.some((skill) => skill && skill.toLowerCase().includes(keyword.toLowerCase())),
       )
 
     // Match education (check both degree and major)
@@ -186,15 +217,17 @@ export default function KeywordMatcherPage() {
       selectedEducation.some((edu) =>
         resume.analysis.education_details.some(
           (eduDetail) =>
-            eduDetail.degree.toLowerCase().includes(edu.toLowerCase()) ||
-            eduDetail.major.toLowerCase().includes(edu.toLowerCase()),
+            (eduDetail.degree && eduDetail.degree.toLowerCase().includes(edu.toLowerCase())) ||
+            (eduDetail.major && eduDetail.major.toLowerCase().includes(edu.toLowerCase())),
         ),
       )
 
     // Match location from education details
     const matchesLocation =
       selectedLocations.length === 0 ||
-      resume.analysis.education_details.some((edu) => selectedLocations.includes(edu.location.toLowerCase()))
+      resume.analysis.education_details.some((edu) => 
+        edu.location && selectedLocations.includes(edu.location.toLowerCase())
+      )
 
     // Match experience range
     const matchesExperience =
@@ -220,7 +253,7 @@ export default function KeywordMatcherPage() {
       activeTab === "all" ||
       (activeTab === "technical" &&
         resume.analysis.key_skills.some((skill) =>
-          [
+          skill && [
             "programming",
             "development",
             "software",
@@ -235,13 +268,13 @@ export default function KeywordMatcherPage() {
         )) ||
       (activeTab === "management" &&
         resume.analysis.key_skills.some((skill) =>
-          ["management", "leadership", "project", "team", "strategy", "business", "operations"].some((mgmt) =>
+          skill && ["management", "leadership", "project", "team", "strategy", "business", "operations"].some((mgmt) =>
             skill.toLowerCase().includes(mgmt),
           ),
         )) ||
       (activeTab === "design" &&
         resume.analysis.key_skills.some((skill) =>
-          ["design", "ui", "ux", "graphic", "creative", "visual", "illustration"].some((des) =>
+          skill && ["design", "ui", "ux", "graphic", "creative", "visual", "illustration"].some((des) =>
             skill.toLowerCase().includes(des),
           ),
         ))
@@ -258,10 +291,10 @@ export default function KeywordMatcherPage() {
     } else if (sortOption === "relevance") {
       // Sort by number of matching keywords (default)
       const aMatches = selectedKeywords.filter((keyword) =>
-        a.analysis.key_skills.some((skill) => skill.toLowerCase().includes(keyword.toLowerCase())),
+        a.analysis.key_skills.some((skill) => skill && skill.toLowerCase().includes(keyword.toLowerCase())),
       ).length
       const bMatches = selectedKeywords.filter((keyword) =>
-        b.analysis.key_skills.some((skill) => skill.toLowerCase().includes(keyword.toLowerCase())),
+        b.analysis.key_skills.some((skill) => skill && skill.toLowerCase().includes(keyword.toLowerCase())),
       ).length
       return bMatches - aMatches
     }
@@ -275,15 +308,16 @@ export default function KeywordMatcherPage() {
 
   // Filter keywords based on search
   const filteredKeywords = Array.from(keywords).filter((keyword) =>
-    keyword.toLowerCase().includes(searchTerm.toLowerCase()),
+    keyword && keyword.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   // Calculate match score for a resume
   const calculateMatchScore = (resume: Resume) => {
     if (selectedKeywords.length === 0) return 100
+    if (!resume.analysis.key_skills || !Array.isArray(resume.analysis.key_skills)) return 0
 
     const matchingKeywords = selectedKeywords.filter((keyword) =>
-      resume.analysis.key_skills.some((skill) => skill.toLowerCase().includes(keyword.toLowerCase())),
+      resume.analysis.key_skills.some((skill) => skill && skill.toLowerCase().includes(keyword.toLowerCase())),
     ).length
 
     return Math.round((matchingKeywords / selectedKeywords.length) * 100)
@@ -336,10 +370,11 @@ export default function KeywordMatcherPage() {
         animate={{
           marginLeft: isMobile ? 0 : isSidebarOpen ? "16rem" : "4.5rem",
           width: isMobile ? "100%" : isSidebarOpen ? "calc(100% - 16rem)" : "calc(100% - 4.5rem)",
+          paddingLeft: isMobile ? "0" : isSidebarOpen ? "0.5rem" : "0.5rem",
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
-        <div className={`py-8 ${isSidebarOpen ? 'container mx-auto px-4 md:px-8' : 'px-6 sm:px-8 md:px-10'}`}>
+        <div className="py-8 px-4 md:px-6 max-w-[1400px] mx-auto">
           {/* Header Section with gradient background */}
           <div className="mb-8 relative overflow-hidden rounded-xl bg-gradient-to-br from-violet-500/10 via-violet-400/5 to-blue-500/10 p-4 sm:p-8 border border-violet-200/20 dark:border-violet-800/20 shadow-sm">
             <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,#fff,transparent)]"></div>

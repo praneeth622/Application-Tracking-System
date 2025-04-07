@@ -67,19 +67,10 @@ export function ResumeCard({
   }
 
   // Check if a skill matches any selected keyword
-  const isSkillHighlighted = (skill: string) => {
-    if (selectedKeywords.length === 0) return false
-    return selectedKeywords.some((keyword) => skill.toLowerCase().includes(keyword.toLowerCase()))
+  const isHighlighted = (skill: string) => {
+    if (!selectedKeywords.length) return false
+    return selectedKeywords.some((keyword) => skill && skill.toLowerCase().includes(keyword.toLowerCase()))
   }
-
-  // Get color based on match score
-  const getScoreColorClass = (score: number) => {
-    if (score > 80) return "bg-emerald-500"
-    if (score > 50) return "bg-amber-500"
-    return "bg-red-500"
-  }
-
-  const matchScore = calculateMatchScore(resume)
 
   return (
     <Card className="overflow-hidden border border-violet-200/50 dark:border-violet-800/50 hover:shadow-md transition-all duration-200">
@@ -91,6 +82,7 @@ export function ResumeCard({
                 {name}
               </h3>
               <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
+
                 {educationDetails[0]?.degree && (
                   <div className="flex items-center gap-1">
                     <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
@@ -103,7 +95,7 @@ export function ResumeCard({
                     <span>{workExperienceDetails[0].title}</span>
                   </div>
                 )}
-                {experienceYears !== undefined && (
+
                   <div className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-emerald-500" />
                     <span>
@@ -119,22 +111,22 @@ export function ResumeCard({
               <div className="flex items-center gap-2">
                 <div className="text-sm font-medium">Match Score:</div>
                 <div className="flex items-center gap-2">
-                  <div className="h-2 w-24 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <Progress
-                      value={matchScore}
-                      className={`h-full ${getScoreColorClass(matchScore)}`}
-                    />
-                  </div>
+                  <Progress 
+                    value={calculateMatchScore(resume)} 
+                    className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800" 
+                  />
                   <span
                     className={`text-sm font-medium ${
-                      matchScore > 80
+                      calculateMatchScore(resume) > 80
                         ? "text-emerald-600 dark:text-emerald-400"
+
                         : matchScore > 50
                         ? "text-amber-600 dark:text-amber-400"
                         : "text-red-600 dark:text-red-400"
+
                     }`}
                   >
-                    {matchScore}%
+                    {calculateMatchScore(resume)}%
                   </span>
                 </div>
               </div>
@@ -145,6 +137,7 @@ export function ResumeCard({
           <div className="mt-4">
             <h4 className="text-sm font-medium text-violet-700 dark:text-violet-300 mb-2">Key Skills</h4>
             <div className="flex flex-wrap gap-1.5">
+
               {keySkills
                 .slice(0, expandedSkills ? keySkills.length : 8)
                 .map((skill, idx) => (
@@ -163,7 +156,7 @@ export function ResumeCard({
                     {skill}
                   </Badge>
                 ))}
-              {keySkills.length > 8 && !expandedSkills && (
+
                 <Badge
                   variant="outline"
                   className="px-2 py-0.5 text-xs cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-900/20"
