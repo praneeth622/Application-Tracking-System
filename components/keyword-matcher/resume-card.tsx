@@ -54,6 +54,13 @@ export function ResumeCard({
 }: ResumeCardProps) {
   const [expandedSkills, setExpandedSkills] = useState(false)
 
+  // Safely access nested properties
+  const educationDetails = resume?.analysis?.education_details || []
+  const workExperienceDetails = resume?.analysis?.work_experience_details || []
+  const keySkills = resume?.analysis?.key_skills || []
+  const name = resume?.analysis?.name || "Unnamed Candidate"
+  const experienceYears = resume?.analysis?.experience_years
+
   // Toggle expanded skills
   const toggleExpandSkills = () => {
     setExpandedSkills(!expandedSkills)
@@ -72,30 +79,27 @@ export function ResumeCard({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
             <div>
               <h3 className="text-lg font-semibold text-violet-900 dark:text-violet-100">
-                {resume.analysis.name || "Unnamed Candidate"}
+                {name}
               </h3>
               <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
-                {resume.analysis.education_details &&
-                  resume.analysis.education_details.length > 0 &&
-                  resume.analysis.education_details[0]?.degree && (
-                    <div className="flex items-center gap-1">
-                      <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
-                      <span>{resume.analysis.education_details[0].degree}</span>
-                    </div>
-                  )}
-                {resume.analysis.work_experience_details &&
-                  resume.analysis.work_experience_details.length > 0 &&
-                  resume.analysis.work_experience_details[0]?.title && (
-                    <div className="flex items-center gap-1">
-                      <Briefcase className="w-3.5 h-3.5 text-amber-500" />
-                      <span>{resume.analysis.work_experience_details[0].title}</span>
-                    </div>
-                  )}
-                {resume.analysis.experience_years !== undefined && (
+
+                {educationDetails[0]?.degree && (
+                  <div className="flex items-center gap-1">
+                    <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
+                    <span>{educationDetails[0].degree}</span>
+                  </div>
+                )}
+                {workExperienceDetails[0]?.title && (
+                  <div className="flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{workExperienceDetails[0].title}</span>
+                  </div>
+                )}
+
                   <div className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-emerald-500" />
                     <span>
-                      {resume.analysis.experience_years} {resume.analysis.experience_years === 1 ? "year" : "years"}{" "}
+                      {experienceYears} {experienceYears === 1 ? "year" : "years"}{" "}
                       experience
                     </span>
                   </div>
@@ -115,9 +119,11 @@ export function ResumeCard({
                     className={`text-sm font-medium ${
                       calculateMatchScore(resume) > 80
                         ? "text-emerald-600 dark:text-emerald-400"
-                        : calculateMatchScore(resume) > 50
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-red-600 dark:text-red-400"
+
+                        : matchScore > 50
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-red-600 dark:text-red-400"
+
                     }`}
                   >
                     {calculateMatchScore(resume)}%
@@ -131,32 +137,32 @@ export function ResumeCard({
           <div className="mt-4">
             <h4 className="text-sm font-medium text-violet-700 dark:text-violet-300 mb-2">Key Skills</h4>
             <div className="flex flex-wrap gap-1.5">
-              {resume.analysis.key_skills &&
-                resume.analysis.key_skills
-                  .slice(0, expandedSkills ? resume.analysis.key_skills.length : 8)
-                  .map((skill, idx) => (
-                    <Badge
-                      key={idx}
-                      variant="outline"
-                      className={`
-                    px-2 py-0.5 text-xs font-medium
-                    ${
-                      isHighlighted(skill)
-                        ? "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-800 dark:text-violet-300"
-                        : "bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700"
-                    }
-                  `}
-                    >
-                      {skill}
-                    </Badge>
-                  ))}
-              {resume.analysis.key_skills && resume.analysis.key_skills.length > 8 && !expandedSkills && (
+
+              {keySkills
+                .slice(0, expandedSkills ? keySkills.length : 8)
+                .map((skill, idx) => (
+                  <Badge
+                    key={idx}
+                    variant="outline"
+                    className={`
+                      px-2 py-0.5 text-xs font-medium
+                      ${
+                        isSkillHighlighted(skill)
+                          ? "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-800 dark:text-violet-300"
+                          : "bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700"
+                      }
+                    `}
+                  >
+                    {skill}
+                  </Badge>
+                ))}
+
                 <Badge
                   variant="outline"
                   className="px-2 py-0.5 text-xs cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-900/20"
                   onClick={toggleExpandSkills}
                 >
-                  +{resume.analysis.key_skills.length - 8} more
+                  +{keySkills.length - 8} more
                 </Badge>
               )}
               {expandedSkills && (

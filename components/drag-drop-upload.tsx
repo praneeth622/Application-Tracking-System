@@ -5,7 +5,8 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
-import { Upload, FileText, X, FileUp, CloudUpload, Clock, Trash2 } from "lucide-react"
+import { Upload, FileText, X, FileUp, CloudUpload, CheckCircle, AlertCircle, Sparkles } from "lucide-react"
+
 import { s3Client, bucketName } from "@/AWSConfig"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 
