@@ -1,130 +1,68 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Initialize the Gemini API with your API key
+// Update the initialization with the correct API version
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-/**
- * Analyzes how well a resume matches a job description
- * @param jobData The job details
- * @param resumeData The resume details
- * @returns Match analysis results
- */
-export const analyzeMatch = async (jobData: any, resumeData: any) => {
+// Update the model name to use the current version
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+// Replace any usage of "gemini-pro" with "gemini-1.5-pro" elsewhere in the file
+export async function analyzeMatch(job: any, resume: any) {
   try {
-    // Format job data for prompt
-    const jobPrompt = `
-      Job Title: ${jobData.title || "Not specified"}
-      Company: ${jobData.company || "Not specified"}
-      Location: ${jobData.location || "Not specified"}
-      Job Description: ${jobData.description || "Not specified"}
-      Skills Required: ${jobData.skills?.join(", ") || "Not specified"}
-      Experience Required: ${jobData.experience || "Not specified"}
-      Education Required: ${jobData.education || "Not specified"}
-      Job Type: ${jobData.jobType || "Not specified"}
-    `;
-
-    // Format resume data for prompt
-    const resumePrompt = `
-      Candidate Name: ${resumeData.name || "Not specified"}
-      Skills: ${resumeData.analysis?.skills?.join(", ") || "Not specified"}
-      Years of Experience: ${resumeData.analysis?.years_of_experience || "Not specified"}
-      
-      Work Experience:
-      ${resumeData.analysis?.work_experience_details
-        ?.map((exp: any) => 
-          `- ${exp.position} at ${exp.company}, ${exp.duration?.start || ""} to ${exp.duration?.end || "present"}
-           ${exp.responsibilities ? exp.responsibilities.join("; ") : ""}`
-        )
-        .join("\n") || "Not specified"}
-      
-      Education:
-      ${resumeData.analysis?.education_details
-        ?.map((edu: any) => 
-          `- ${edu.degree} in ${edu.major} from ${edu.institute}, ${edu.year || ""}`
-        )
-        .join("\n") || "Not specified"}
-      
-      Certifications:
-      ${resumeData.analysis?.certifications?.join(", ") || "None"}
-      
-      Summary: ${resumeData.analysis?.summary || "Not provided"}
-    `;
-
-    // Create a structured prompt for the AI
     const prompt = `
-      As an AI recruitment assistant, analyze how well this candidate's profile matches the job requirements.
+      # Job Description and Resume Matching Analysis
       
-      JOB DETAILS:
-      ${jobPrompt}
+      ## Job Details:
+      ${JSON.stringify(job, null, 2)}
       
-      CANDIDATE PROFILE:
-      ${resumePrompt}
+      ## Resume:
+      ${JSON.stringify(resume, null, 2)}
       
-      Please provide a structured JSON response with the following fields:
-      - matchPercentage: A number between 0-100 representing overall match
-      - matchingSkills: Array of skills that match the job requirements
-      - missingRequirements: Array of requirements the candidate doesn't meet
-      - experienceMatch: Boolean indicating if candidate meets experience requirements
-      - educationMatch: Boolean indicating if candidate meets education requirements
-      - overallAssessment: Brief text explaining the match quality
+      ## Task:
+      Analyze how well this resume matches the job description. Provide:
+      1. Match percentage (number between 0-100)
+      2. List of matching skills found in both job and resume
+      3. List of required skills/qualifications missing in the resume
+      4. Whether the candidate's experience level matches requirements (true/false)
+      5. Whether the candidate's education matches requirements (true/false)
+      6. A brief overall assessment of the candidate's fit
       
-      FORMAT YOUR RESPONSE AS VALID JSON ONLY.
+      ## Output Format (JSON):
+      {
+        "matchPercentage": 85,
+        "matchingSkills": ["skill1", "skill2"],
+        "missingRequirements": ["req1", "req2"],
+        "experienceMatch": true,
+        "educationMatch": true,
+        "overallAssessment": "This candidate is a strong match because..."
+      }
     `;
 
-    // Send prompt to Gemini API
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const response = await result.response;
+    const text = response.text();
     
-    // Parse the response as JSON
-    try {
-      // Find JSON in the response (handle case where AI adds extra text)
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? jsonMatch[0] : text;
-      const jsonResponse = JSON.parse(jsonStr);
-      
-      return {
-        ...resumeData,
-        matchAnalysis: {
-          matchPercentage: Number(jsonResponse.matchPercentage) || 0,
-          matchingSkills: jsonResponse.matchingSkills || [],
-          missingRequirements: jsonResponse.missingRequirements || [],
-          experienceMatch: Boolean(jsonResponse.experienceMatch),
-          educationMatch: Boolean(jsonResponse.educationMatch),
-          overallAssessment: jsonResponse.overallAssessment || "No assessment provided"
-        }
-      };
-    } catch (error) {
-      console.error("Error parsing AI response:", error);
-      // Return a default match analysis if parsing fails
-      return {
-        ...resumeData,
-        matchAnalysis: {
-          matchPercentage: 0,
-          matchingSkills: [],
-          missingRequirements: ["Failed to analyze requirements"],
-          experienceMatch: false,
-          educationMatch: false,
-          overallAssessment: "Failed to analyze match due to an error."
-        }
-      };
+    // Extract JSON from the response
+    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || 
+                      text.match(/\{[\s\S]*\}/);
+                      
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[0].replace(/```json|```/g, '').trim();
+      return JSON.parse(jsonStr);
+    } else {
+      // Fallback for when JSON isn't properly formatted
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error("Failed to parse JSON response:", text);
+        return null;
+      }
     }
   } catch (error) {
     console.error("Error in match analysis:", error);
-    // Return a default match analysis if API call fails
-    return {
-      ...resumeData,
-      matchAnalysis: {
-        matchPercentage: 0,
-        matchingSkills: [],
-        missingRequirements: ["Failed to analyze requirements"],
-        experienceMatch: false,
-        educationMatch: false,
-        overallAssessment: "Failed to analyze match due to an error."
-      }
-    };
+    return null;
   }
-};
+}
 
 /**
  * Process a batch of resumes against a job description

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { collection, getDocs, doc, getDoc, writeBatch, onSnapshot } from "firebase/firestore"
+import { collection, getDocs, doc, getDoc, writeBatch, onSnapshot, setDoc, updateDoc } from "firebase/firestore"
 import { db } from "@/FirebaseConfig"
 import {
   ArrowLeft,
@@ -165,203 +165,62 @@ export default function CandidatesPage() {
 
   const fetchResumes = async () => {
     try {
-
-      let allResumes: ResumeData[] = [];
+      // First check if we have candidates in relevant_profiles
+      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
+      const storedProfilesDoc = await getDoc(relevantProfilesRef);
       
-      // 1. First try to get job-specific resumes from the current job
-      try {
-        const jobResumesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
-        const jobResumesDoc = await getDoc(jobResumesRef);
-        
-        if (jobResumesDoc.exists() && jobResumesDoc.data().resumes) {
-          console.log(`Found job-specific resumes: ${jobResumesDoc.data().resumes.length}`);
-          // Format job-specific resumes to match the ResumeData interface
-          const jobResumes = jobResumesDoc.data().resumes.map((resume: any) => ({
-            filename: resume.filename,
-            analysis: {
-              name: resume.name || resume.analysis?.name || "Unknown",
-              email: resume.email || resume.analysis?.email || "No email",
-              key_skills: resume.analysis?.key_skills || [],
-              education_details: resume.analysis?.education_details || [],
-              work_experience_details: resume.analysis?.work_experience_details || []
-            },
-            userId: resume.user_id || "unknown",
-            userEmail: resume.user_emailid || resume.analysis?.email || "No email"
-          }));
-          
-          allResumes = [...allResumes, ...jobResumes];
-        }
-      } catch (error) {
-        console.warn("Failed to fetch job-specific resumes:", error);
+      if (storedProfilesDoc.exists() && storedProfilesDoc.data().candidates?.length > 0) {
+        console.log("Found existing candidates in relevant_profiles");
+        return storedProfilesDoc.data().candidates;
+      }
+
+      // Direct approach - try to get job data first
+      const jobRef = doc(db, "jobs", jobId);
+      const jobDoc = await getDoc(jobRef);
+      
+      if (jobDoc.exists() && jobDoc.data().resumes && Array.isArray(jobDoc.data().resumes)) {
+        console.log(`Found resumes directly in job document: ${jobDoc.data().resumes.length}`);
+        return jobDoc.data().resumes;
       }
       
-      // 2. Try to get resumes from users collection
+      // Try to get all users' resumes
+      let allResumes: ResumeData[] = [];
       const usersRef = collection(db, "users");
       const usersSnapshot = await getDocs(usersRef);
-      console.log(`Found ${usersSnapshot.size} users`);
+      console.log(`Found ${usersSnapshot.size} users to check for resumes`);
       
       for (const userDoc of usersSnapshot.docs) {
         try {
           const userId = userDoc.id;
           const userResumesRef = doc(db, "users", userId, "resumes", "data");
-          console.log(`${userId} - Checking resumes at: ${userResumesRef.path}`);
+          console.log(`Checking resumes for user ${userId}`);
           const userResumesDoc = await getDoc(userResumesRef);
+          console.log(`User ${userId} resumes document exists:`, userResumesDoc.exists());
           
-          if (userResumesDoc.exists()) {
-            const userData = userResumesDoc.data();
-            console.log(`User data for ${userId}:`, userData);
-            
-            if (userData.resumes && Array.isArray(userData.resumes)) {
-              console.log(`Found ${userData.resumes.length} resumes for user ${userId}`);
-              
-              const userResumes = userData.resumes.map((resume: any) => ({
-                filename: resume.filename,
-                analysis: {
-                  name: resume.analysis?.name || "Unknown",
-                  email: resume.analysis?.email || userData.user_emailid || "No email",
-                  key_skills: resume.analysis?.key_skills || [],
-                  education_details: resume.analysis?.education_details || [],
-                  work_experience_details: resume.analysis?.work_experience_details || []
-                },
-                userId: userId,
-                userEmail: userData.user_emailid || resume.analysis?.email || "No email"
-              }));
-              
-              allResumes = [...allResumes, ...userResumes];
-
-            }
-          } else {
-            // Try alternate path: some systems store at /users/{userId}/data/resumes
-            try {
-              const altUserResumesRef = doc(db, "users", userId, "data", "resumes");
-              const altUserResumesDoc = await getDoc(altUserResumesRef);
-              
-              if (altUserResumesDoc.exists()) {
-                const userData = altUserResumesDoc.data();
-                console.log(`Found alternate resume path for ${userId}`);
-                
-                if (userData.resumes && Array.isArray(userData.resumes)) {
-                  const userResumes = userData.resumes.map((resume: any) => ({
-                    filename: resume.filename,
-                    analysis: {
-                      name: resume.analysis?.name || "Unknown",
-                      email: resume.analysis?.email || "No email",
-                      key_skills: resume.analysis?.key_skills || [],
-                      education_details: resume.analysis?.education_details || [],
-                      work_experience_details: resume.analysis?.work_experience_details || []
-                    },
-                    userId: userId,
-                    userEmail: resume.analysis?.email || "No email"
-                  }));
-                  
-                  allResumes = [...allResumes, ...userResumes];
-                }
-              }
-            } catch (error) {
-              console.warn(`Failed to fetch from alternate path for user ${userId}:`, error);
-            }
+          if (userResumesDoc.exists() && userResumesDoc.data().resumes) {
+            const resumes = userResumesDoc.data().resumes;
+            console.log(`Found ${resumes.length} resumes for user ${userId}`);
+            allResumes = [...allResumes, ...resumes];
           }
         } catch (error) {
-
-          console.warn(`Failed to fetch resumes for user ${userId}:`, error);
+          console.warn(`Failed to fetch resumes for user ${userDoc.id}:`, error);
           continue;
         }
       }
       
-      // 3. Check if we have resumes directly in the job document
-      try {
-        const jobRef = doc(db, "jobs", jobId);
-        const jobDoc = await getDoc(jobRef);
-        
-        if (jobDoc.exists() && jobDoc.data().resumes && Array.isArray(jobDoc.data().resumes)) {
-          console.log(`Found resumes directly in job document: ${jobDoc.data().resumes.length}`);
-          const jobResumes = jobDoc.data().resumes.map((resume: any) => ({
-            filename: resume.filename,
-            analysis: {
-              name: resume.name || resume.analysis?.name || "Unknown",
-              email: resume.email || resume.analysis?.email || "No email",
-              key_skills: resume.analysis?.key_skills || [],
-              education_details: resume.analysis?.education_details || [],
-              work_experience_details: resume.analysis?.work_experience_details || []
-            },
-            userId: resume.user_id || "unknown",
-            userEmail: resume.user_emailid || resume.analysis?.email || "No email"
-          }));
-          
-          allResumes = [...allResumes, ...jobResumes];
-        }
-      } catch (error) {
-        console.warn("Failed to fetch resumes from job document:", error);
+      console.log(`Total resumes found from all users: ${allResumes.length}`);
+      
+      // If we found resumes, return them
+      if (allResumes.length > 0) {
+        return allResumes;
       }
       
-      // 4. Finally check if job/resumes/data exists
-      try {
-        const jobResumesDataRef = doc(db, "jobs", jobId, "resumes", "data");
-        const jobResumesDataDoc = await getDoc(jobResumesDataRef);
-        
-        if (jobResumesDataDoc.exists() && jobResumesDataDoc.data().resumes && Array.isArray(jobResumesDataDoc.data().resumes)) {
-          console.log(`Found resumes in job/resumes/data: ${jobResumesDataDoc.data().resumes.length}`);
-          const jobResumes = jobResumesDataDoc.data().resumes.map((resume: any) => ({
-            filename: resume.filename,
-            analysis: {
-              name: resume.name || resume.analysis?.name || "Unknown",
-              email: resume.email || resume.analysis?.email || "No email",
-              key_skills: resume.analysis?.key_skills || [],
-              education_details: resume.analysis?.education_details || [],
-              work_experience_details: resume.analysis?.work_experience_details || []
-            },
-            userId: resume.user_id || "unknown",
-            userEmail: resume.user_emailid || resume.analysis?.email || "No email"
-          }));
-          
-          allResumes = [...allResumes, ...jobResumes];
-        }
-      } catch (error) {
-        console.warn("Failed to fetch resumes from job/resumes/data:", error);
-      }
-  
-      // 5. If still no resumes, try getting all resumes from all users in a flat structure
-      if (allResumes.length === 0) {
-        try {
-          // This is a catch-all approach to get resumes from anywhere in the database
-          const resumesCollection = collection(db, "resumes");
-          const resumesSnapshot = await getDocs(resumesCollection);
-          
-          if (!resumesSnapshot.empty) {
-            console.log(`Found ${resumesSnapshot.size} resumes in direct resumes collection`);
-            
-            resumesSnapshot.forEach(doc => {
-              const resumeData = doc.data();
-              allResumes.push({
-                filename: resumeData.filename || doc.id,
-                analysis: {
-                  name: resumeData.name || resumeData.analysis?.name || "Unknown",
-                  email: resumeData.email || resumeData.analysis?.email || "No email",
-                  key_skills: resumeData.analysis?.key_skills || [],
-                  education_details: resumeData.analysis?.education_details || [],
-                  work_experience_details: resumeData.analysis?.work_experience_details || []
-                },
-                userId: resumeData.userId || "unknown",
-                userEmail: resumeData.userEmail || resumeData.analysis?.email || "No email"
-              });
-            });
-          }
-        } catch (error) {
-          console.warn("Failed to fetch from direct resumes collection:", error);
-        }
-      }
-      
-      // Remove duplicates based on filename
-      const uniqueResumes = allResumes.filter((resume, index, self) =>
-        index === self.findIndex(r => r.filename === resume.filename)
-      );
-      
-      console.log(`Successfully fetched ${uniqueResumes.length} unique resumes`);
-      return uniqueResumes;
-
+      // If no resumes found from any approach, return empty array
+      return [];
     } catch (error) {
-      console.error("Error in fetchResumes:", error)
-      throw new Error("Failed to fetch resumes")
+      console.error("Error in fetchResumes:", error);
+      // Return empty array instead of throwing error
+      return [];
     }
   }
 
@@ -393,70 +252,74 @@ export default function CandidatesPage() {
       setIsAnalyzing(true)
 
       try {
-
+        // First check for existing analyzed candidates
         const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
         const storedProfilesDoc = await getDoc(relevantProfilesRef);
-        console.log("Stored profiles document exists:", storedProfilesDoc.exists());
 
-        if (storedProfilesDoc.exists()) {
+        if (storedProfilesDoc.exists() && storedProfilesDoc.data().candidates?.length > 0) {
+          console.log("Found existing candidates in relevant_profiles");
           const data = storedProfilesDoc.data();
-          console.log("Stored profiles data:", data);
 
-          if (data.candidates?.length > 0) {
-            // Filter out duplicate candidates
-            const allCandidates = data.candidates
-            const uniqueCandidates = filterDuplicateCandidates(allCandidates)
+          // Filter out duplicate candidates
+          const allCandidates = data.candidates
+          const uniqueCandidates = filterDuplicateCandidates(allCandidates)
 
-            // Track how many duplicates were removed
-            setDuplicatesRemoved(allCandidates.length - uniqueCandidates.length)
+          // Track how many duplicates were removed
+          setDuplicatesRemoved(allCandidates.length - uniqueCandidates.length)
 
-            // Sort candidates by match percentage
-            const sortedCandidates = uniqueCandidates.sort((a: Candidate, b: Candidate) => {
-              return b.matchAnalysis.matchPercentage - a.matchAnalysis.matchPercentage
-            })
+          // Sort candidates by match percentage
+          const sortedCandidates = uniqueCandidates.sort((a: Candidate, b: Candidate) => {
+            return b.matchAnalysis.matchPercentage - a.matchAnalysis.matchPercentage
+          })
 
-            setCandidates(sortedCandidates)
-            setIsAnalyzing(false)
-            setIsLoading(false)
-            return
-          }
+          setCandidates(sortedCandidates)
+          setIsAnalyzing(false)
+          setIsLoading(false)
+          return
         }
 
-
+        // If no candidates found, fetch job details and resumes
         console.log("Performing new analysis");
         const jobDetailsRef = doc(db, "jobs", jobId, "data", "details");
         const jobDetailsDoc = await getDoc(jobDetailsRef);
-        console.log("Job details document exists:", jobDetailsDoc.exists());
-
+        
         if (!jobDetailsDoc.exists()) {
-          throw new Error("Job not found")
-        }
-
-
-        const jobData = jobDetailsDoc.data();
-        console.log("Job data:", jobData);
-        const resumesData = await fetchResumes();
-        console.log("Resumes data:", resumesData);
-
-        if (resumesData.length === 0) {
-          toast.error("No resumes found in the system");
-          console.log ("No resumes found");
+          toast.error("Job not found");
           setIsLoading(false);
           setIsAnalyzing(false);
           return;
-
         }
 
-        const analysisResults = await analyzeBatchMatches(jobData, resumesData)
+        const jobData = jobDetailsDoc.data();
+        console.log("Job data:", jobData);
+        
+        // Fetch resumes from all users
+        const resumesData = await fetchResumes();
+        console.log(`Total resumes to analyze: ${resumesData.length}`);
+
+        if (resumesData.length === 0) {
+          // CHANGED: Don't create sample data, just show a message
+          toast.error("No resumes found in the system");
+          setIsLoading(false);
+          setIsAnalyzing(false);
+          return;
+        }
+
+        // Analyze all fetched resumes against job requirements
+        toast.info(`Analyzing ${resumesData.length} resumes for matching candidates...`);
+        const analysisResults = await analyzeBatchMatches(jobData, resumesData);
 
         if (!analysisResults || analysisResults.length === 0) {
-
           toast.error("No matching candidates found");
-          console.log ("No matching candidates found");
+          console.log("No matching candidates found");
+          setIsLoading(false);
+          setIsAnalyzing(false);
           return;
-
         }
 
+        console.log(`Found ${analysisResults.length} potential matches`);
+        
+        // Filter for candidates with > 50% match and map to Candidate structure
         const matchedCandidates = analysisResults
           .filter((result) => result.matchPercentage > 50)
           .map((result) => {
@@ -481,34 +344,36 @@ export default function CandidatesPage() {
             } as Candidate
           })
 
+        console.log(`${matchedCandidates.length} candidates matched with > 50% match rate`);
+        
         // Filter out duplicate candidates
         const uniqueCandidates = filterDuplicateCandidates(matchedCandidates)
+        console.log(`${uniqueCandidates.length} unique candidates after removing duplicates`);
 
         // Track how many duplicates were removed
         setDuplicatesRemoved(matchedCandidates.length - uniqueCandidates.length)
 
-        const batch = writeBatch(db)
+        try {
+          // Update relevant_profiles collection
+          await setDoc(relevantProfilesRef, {
+            candidates: uniqueCandidates,
+            metadata: {
+              analyzed_at: new Date(),
+              analyzed_by: user.email,
+              total_candidates: uniqueCandidates.length,
+              total_resumes_analyzed: resumesData.length,
+              job_id: jobId,
+              lastUpdated: new Date()
+            }
+          });
+          
+          toast.success(`Found ${uniqueCandidates.length} matching candidates`);
+        } catch (error) {
+          console.error("Error saving candidates to Firestore:", error);
+          toast.error("Failed to save analysis results, but showing matches anyway");
+          // Continue with UI update even if saving fails
+        }
 
-        const jobResumesRef = doc(db, "jobs", jobId, "resumes", "details")
-        batch.set(jobResumesRef, {
-          relevant_candidates: uniqueCandidates,
-          updated_at: new Date(),
-          total_matches: uniqueCandidates.length,
-          status: "analyzed",
-        })
-
-        batch.set(relevantProfilesRef, {
-          candidates: uniqueCandidates,
-          metadata: {
-            analyzed_at: new Date(),
-            analyzed_by: user.email,
-            total_candidates: uniqueCandidates.length,
-            total_resumes_analyzed: resumesData.length,
-            job_id: jobId,
-          },
-        })
-
-        await batch.commit()
         setCandidates(uniqueCandidates)
       } catch (error) {
         console.error("Error in analyzeCandidates:", error)
