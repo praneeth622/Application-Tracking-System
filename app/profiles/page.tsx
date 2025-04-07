@@ -100,19 +100,24 @@ export default function ProfilesPage() {
       const { analysis } = profile
 
       // Search in name and email
-      if (analysis?.name?.toLowerCase().includes(query) || analysis?.email?.toLowerCase().includes(query)) {
+      if (
+        (analysis?.name && analysis.name.toLowerCase().includes(query)) || 
+        (analysis?.email && analysis.email.toLowerCase().includes(query))
+      ) {
         return true
       }
 
       // Search in skills
-      if (analysis?.key_skills?.some((skill) => skill.toLowerCase().includes(query))) {
+      if (analysis?.key_skills?.some((skill) => skill && skill.toLowerCase().includes(query))) {
         return true
       }
 
       // Search in work experience
       if (
         analysis?.work_experience_details?.some(
-          (exp) => exp.company.toLowerCase().includes(query) || exp.position.toLowerCase().includes(query),
+          (exp) => 
+            (exp.company && exp.company.toLowerCase().includes(query)) || 
+            (exp.position && exp.position.toLowerCase().includes(query))
         )
       ) {
         return true
@@ -122,9 +127,9 @@ export default function ProfilesPage() {
       if (
         analysis?.education_details?.some(
           (edu) =>
-            edu.degree.toLowerCase().includes(query) ||
-            edu.major.toLowerCase().includes(query) ||
-            edu.institute.toLowerCase().includes(query),
+            (edu.degree && edu.degree.toLowerCase().includes(query)) ||
+            (edu.major && edu.major.toLowerCase().includes(query)) ||
+            (edu.institute && edu.institute.toLowerCase().includes(query))
         )
       ) {
         return true

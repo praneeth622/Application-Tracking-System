@@ -60,19 +60,10 @@ export function ResumeCard({
   }
 
   // Check if a skill matches any selected keyword
-  const isSkillHighlighted = (skill: string) => {
-    if (selectedKeywords.length === 0) return false
-    return selectedKeywords.some((keyword) => skill.toLowerCase().includes(keyword.toLowerCase()))
+  const isHighlighted = (skill: string) => {
+    if (!selectedKeywords.length) return false
+    return selectedKeywords.some((keyword) => skill && skill.toLowerCase().includes(keyword.toLowerCase()))
   }
-
-  // Get color based on match score
-  const getScoreColorClass = (score: number) => {
-    if (score > 80) return "bg-emerald-500"
-    if (score > 50) return "bg-amber-500"
-    return "bg-red-500"
-  }
-
-  const matchScore = calculateMatchScore(resume)
 
   return (
     <Card className="overflow-hidden border border-violet-200/50 dark:border-violet-800/50 hover:shadow-md transition-all duration-200">
@@ -84,18 +75,22 @@ export function ResumeCard({
                 {resume.analysis.name || "Unnamed Candidate"}
               </h3>
               <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
-                {resume.analysis.education_details[0]?.degree && (
-                  <div className="flex items-center gap-1">
-                    <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
-                    <span>{resume.analysis.education_details[0].degree}</span>
-                  </div>
-                )}
-                {resume.analysis.work_experience_details[0]?.title && (
-                  <div className="flex items-center gap-1">
-                    <Briefcase className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{resume.analysis.work_experience_details[0].title}</span>
-                  </div>
-                )}
+                {resume.analysis.education_details &&
+                  resume.analysis.education_details.length > 0 &&
+                  resume.analysis.education_details[0]?.degree && (
+                    <div className="flex items-center gap-1">
+                      <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
+                      <span>{resume.analysis.education_details[0].degree}</span>
+                    </div>
+                  )}
+                {resume.analysis.work_experience_details &&
+                  resume.analysis.work_experience_details.length > 0 &&
+                  resume.analysis.work_experience_details[0]?.title && (
+                    <div className="flex items-center gap-1">
+                      <Briefcase className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{resume.analysis.work_experience_details[0].title}</span>
+                    </div>
+                  )}
                 {resume.analysis.experience_years !== undefined && (
                   <div className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-emerald-500" />
@@ -112,22 +107,20 @@ export function ResumeCard({
               <div className="flex items-center gap-2">
                 <div className="text-sm font-medium">Match Score:</div>
                 <div className="flex items-center gap-2">
-                  <div className="h-2 w-24 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <Progress
-                      value={matchScore}
-                      className={`h-full ${getScoreColorClass(matchScore)}`}
-                    />
-                  </div>
+                  <Progress 
+                    value={calculateMatchScore(resume)} 
+                    className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800" 
+                  />
                   <span
                     className={`text-sm font-medium ${
-                      matchScore > 80
+                      calculateMatchScore(resume) > 80
                         ? "text-emerald-600 dark:text-emerald-400"
-                        : matchScore > 50
+                        : calculateMatchScore(resume) > 50
                           ? "text-amber-600 dark:text-amber-400"
                           : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {matchScore}%
+                    {calculateMatchScore(resume)}%
                   </span>
                 </div>
               </div>
@@ -138,25 +131,26 @@ export function ResumeCard({
           <div className="mt-4">
             <h4 className="text-sm font-medium text-violet-700 dark:text-violet-300 mb-2">Key Skills</h4>
             <div className="flex flex-wrap gap-1.5">
-              {resume.analysis.key_skills
-                .slice(0, expandedSkills ? resume.analysis.key_skills.length : 8)
-                .map((skill, idx) => (
-                  <Badge
-                    key={idx}
-                    variant="outline"
-                    className={`
+              {resume.analysis.key_skills &&
+                resume.analysis.key_skills
+                  .slice(0, expandedSkills ? resume.analysis.key_skills.length : 8)
+                  .map((skill, idx) => (
+                    <Badge
+                      key={idx}
+                      variant="outline"
+                      className={`
                     px-2 py-0.5 text-xs font-medium
                     ${
-                      isSkillHighlighted(skill)
+                      isHighlighted(skill)
                         ? "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-800 dark:text-violet-300"
                         : "bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700"
                     }
                   `}
-                  >
-                    {skill}
-                  </Badge>
-                ))}
-              {resume.analysis.key_skills.length > 8 && !expandedSkills && (
+                    >
+                      {skill}
+                    </Badge>
+                  ))}
+              {resume.analysis.key_skills && resume.analysis.key_skills.length > 8 && !expandedSkills && (
                 <Badge
                   variant="outline"
                   className="px-2 py-0.5 text-xs cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-900/20"
