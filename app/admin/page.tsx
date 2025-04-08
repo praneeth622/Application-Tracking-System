@@ -5,12 +5,11 @@ import { motion } from "framer-motion"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { ProtectedAdminRoute } from "@/components/protected-admin-route"
-import { collection, getDocs, doc, getDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
 import { Card } from "@/components/ui/card"
 import { Users, FileText, Building, Briefcase } from "lucide-react"
 import { UserList } from "@/components/user-list"
 import { toast } from '@/components/ui/use-toast'
+import apiClient from "@/lib/api-client"
 
 interface StatsCard {
   title: string
@@ -33,32 +32,37 @@ export default function AdminDashboard() {
     const fetchStats = async () => {
       try {
         // Fetch users count
-        const usersSnapshot = await getDocs(collection(db, "users"))
-        const totalUsers = usersSnapshot.size
+        const users = await apiClient.auth.getAllUsers();
+        const totalUsers = users.length;
 
-        // Fetch total resumes count - updated logic
-        let totalResumes = 0
-        for (const userDoc of usersSnapshot.docs) {
-          const userResumesRef = doc(db, "users", userDoc.id, "resumes", "data")
-          const resumesDoc = await getDoc(userResumesRef)
-          
-          if (resumesDoc.exists()) {
-            const userData = resumesDoc.data()
-            // Add the length of the resumes array if it exists
-            totalResumes += userData.resumes?.length || 0
+        // Get all resumes count - this will need a dedicated endpoint
+        // For now, let's count each user's resumes
+        let totalResumes = 0;
+        for (const user of users) {
+          if (user.uid) {
+            try {
+              const userResumes = await apiClient.resumes.getUserResumes(user.uid);
+              totalResumes += userResumes.length || 0;
+            } catch (error) {
+              console.error(`Error fetching resumes for user ${user.uid}:`, error);
+            }
           }
         }
 
         // Fetch vendors count
-        const vendorsSnapshot = await getDocs(collection(db, "vendors"))
-        const totalVendors = vendorsSnapshot.size
+        const vendors = await apiClient.vendors.getAll();
+        const totalVendors = vendors.length;
+
+        // Fetch jobs count
+        const jobs = await apiClient.jobs.getAll();
+        const totalJobs = jobs.length;
 
         // Update stats state
         setStats({
           totalUsers,
           totalResumes,
           totalVendors,
-          totalJobs: 0 // Update this if you need jobs count
+          totalJobs
         })
 
       } catch (error) {

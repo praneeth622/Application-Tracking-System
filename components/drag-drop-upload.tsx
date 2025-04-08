@@ -15,10 +15,7 @@ import { generateUUID } from "@/utils/generate-id"
 import { useToast } from "@/hooks/use-toast"
 import { analyzeResume } from "@/utils/analyze-resume"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { collection, getDocs, doc, getDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
-
-import { checkDuplicateResume } from "@/utils/firebase-helpers"
+import apiClient from "@/lib/api-client"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -96,9 +93,9 @@ interface FirebaseError {
   name: string
 }
 
-// Update the Vendor interface
+// Define Vendor interface
 interface Vendor {
-  id: string
+  _id: string
   name: string
   address?: string
   contact_person?: string
@@ -128,56 +125,28 @@ export function DragDropUpload() {
   const [selectedVendor, setSelectedVendor] = useState<string>("no-vendor")
   const [isLoadingVendors, setIsLoadingVendors] = useState(true)
 
-  // Replace the existing fetchVendors function in your useEffect
+  // Function to fetch vendors from the API
   useEffect(() => {
     const fetchVendors = async () => {
       setIsLoadingVendors(true)
       try {
-        const vendorsList: Vendor[] = []
-
-        // Get all vendor documents
-        const vendorsCollection = collection(db, "vendors")
-        const vendorsSnapshot = await getDocs(vendorsCollection)
-
-        // For each vendor, try to get details from the details/info subcollection
-        for (const vendorDoc of vendorsSnapshot.docs) {
-          try {
-            const vendorId = vendorDoc.id
-            const infoRef = doc(db, "vendors", vendorId, "details", "info")
-            const infoSnap = await getDoc(infoRef)
-
-            if (infoSnap.exists()) {
-              // If details/info exists, use that data
-              const infoData = infoSnap.data()
-              vendorsList.push({
-                id: vendorId,
-                name: infoData.name || "Unknown Vendor",
-                address: infoData.address,
-                contact_person: infoData.contact_person,
-                country: infoData.country,
-                email: infoData.email,
-                phone: infoData.phone,
-                state: infoData.state,
-                status: infoData.status,
-              })
-            } else {
-              // Fallback to checking if name exists in the main vendor document
-              const vendorData = vendorDoc.data()
-              if (vendorData.name) {
-                vendorsList.push({
-                  id: vendorId,
-                  name: vendorData.name,
-                })
-              }
-            }
-          } catch (error) {
-            console.error(`Error fetching details for vendor ${vendorDoc.id}:`, error)
-          }
-        }
-
-        // Sort vendors alphabetically by name
-        vendorsList.sort((a, b) => a.name.localeCompare(b.name))
-        setVendors(vendorsList)
+        // Use API client to fetch vendors
+        const vendorsList = await apiClient.vendors.getAll();
+        
+        // Map to the format our component expects
+        const mappedVendors = vendorsList.map((vendor: any) => ({
+          id: vendor._id,
+          name: vendor.name,
+          address: vendor.address,
+          contact_person: vendor.contact_person,
+          country: vendor.country,
+          email: vendor.email,
+          phone: vendor.phone,
+          state: vendor.state,
+          status: vendor.status,
+        }));
+        
+        setVendors(mappedVendors);
       } catch (error) {
         console.error("Error fetching vendors:", error)
       } finally {
@@ -198,228 +167,87 @@ export function DragDropUpload() {
         // No more resumes to process or processing paused
         if (isProcessing && resumeQueue.every((item) => ["success", "error"].includes(item.status))) {
           setIsProcessing(false)
-          setUploadStatus("idle")
-          toast({
-            title: "Processing complete",
-            description: `Processed ${resumeQueue.filter((item) => item.status === "success").length} of ${resumeQueue.length} resumes successfully`,
-          })
         }
         return
       }
 
-      // Get the next resume
-      const nextResume = resumeQueue[nextResumeIndex]
+      // Get the resume to process
+      const resumeToProcess = { ...resumeQueue[nextResumeIndex] }
+      resumeToProcess.status = "uploading"
+      resumeToProcess.progress = 10
+
+      // Update the queue
+      const updatedQueue = [...resumeQueue]
+      updatedQueue[nextResumeIndex] = resumeToProcess
+      setResumeQueue(updatedQueue)
 
       try {
-        // Update status to uploading
-        setResumeQueue((prev) =>
-          prev.map((item, idx) => (idx === nextResumeIndex ? { ...item, status: "uploading" } : item)),
-        )
-
-        // Generate file hash for duplicate check
-        const fileBuffer = await nextResume.file.arrayBuffer()
-        const hashBuffer = await crypto.subtle.digest("SHA-256", fileBuffer)
-        const hashArray = Array.from(new Uint8Array(hashBuffer))
-        const fileHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
-
-        // Update the file hash
-        setResumeQueue((prev) => prev.map((item, idx) => (idx === nextResumeIndex ? { ...item, fileHash } : item)))
-
-        // Check for duplicates in the current queue (frontend)
-        const isDuplicateInQueue =
-          resumeQueue.filter((item, idx) => idx !== nextResumeIndex && item.fileHash === fileHash).length > 0
-
-        if (isDuplicateInQueue) {
-          setResumeQueue((prev) =>
-            prev.map((item, idx) =>
-              idx === nextResumeIndex
-                ? {
-                    ...item,
-                    status: "error",
-                    errorMessage: "Duplicate resume in current upload batch",
-                  }
-                : item,
-            ),
-          )
-
-          // Process next resume
-          setProcessedCount((prev) => prev + 1)
-          return
+        const file = resumeToProcess.file
+        
+        // Make sure we have a user
+        if (!user || !user.uid || !user.email) {
+          throw new Error("User not authenticated")
         }
 
-        // Check for duplicates in the database
-        if (user) {
-          const isDuplicate = await checkDuplicateResume(user.uid, fileHash)
-          if (isDuplicate) {
-            setResumeQueue((prev) =>
-              prev.map((item, idx) =>
-                idx === nextResumeIndex
-                  ? {
-                      ...item,
-                      status: "error",
-                      errorMessage: "This resume has already been uploaded to your account",
-                    }
-                  : item,
-              ),
-            )
-
-            // Process next resume
-            setProcessedCount((prev) => prev + 1)
-            return
+        // Get vendor info if selected
+        let vendorId = null
+        let vendorName = null
+        
+        if (selectedVendor && selectedVendor !== "no-vendor") {
+          const vendor = vendors.find((v) => v.id === selectedVendor)
+          if (vendor) {
+            vendorId = vendor.id
+            vendorName = vendor.name
           }
         }
 
-        // Validate if the file is actually a resume
-        const isValidResume = await validateResumeContent(nextResume.file)
-        if (!isValidResume.valid) {
-          setResumeQueue((prev) =>
-            prev.map((item, idx) =>
-              idx === nextResumeIndex
-                ? {
-                    ...item,
-                    status: "error",
-                    errorMessage: isValidResume.message || "This file does not appear to be a valid resume",
-                  }
-                : item,
-            ),
-          )
+        // Start analysis
+        resumeToProcess.status = "analyzing"
+        resumeToProcess.progress = 40
+        updatedQueue[nextResumeIndex] = resumeToProcess
+        setResumeQueue(updatedQueue)
 
-          // Process next resume
-          setProcessedCount((prev) => prev + 1)
-          return
-        }
+        // Call the resume analysis function
+        const results = await analyzeResume(file, user.uid, user.email, vendorId, vendorName)
 
-        // Prepare for S3 upload
-        const resumeId = generateUUID()
-        const fileExtension = nextResume.file.name.split(".").pop()
-        const s3Key = `resumes/${user?.uid || "anonymous"}/${resumeId}.${fileExtension}`
+        // Update with success
+        resumeToProcess.status = "success"
+        resumeToProcess.progress = 100
+        resumeToProcess.result = results.analysis
+        
+        updatedQueue[nextResumeIndex] = resumeToProcess
+        setResumeQueue(updatedQueue)
+        setProcessedCount((prev) => prev + 1)
 
-        // Create S3 upload parameters
-        const uploadParams = {
-          Bucket: bucketName,
-          Key: s3Key,
-          Body: new Uint8Array(fileBuffer),
-          ContentType: nextResume.file.type,
-        }
-
-        // Track upload progress
-        let uploadProgress = 0
-        const progressInterval = setInterval(() => {
-          uploadProgress = Math.min(95, uploadProgress + 5)
-          setResumeQueue((prev) =>
-            prev.map((item, idx) => (idx === nextResumeIndex ? { ...item, progress: uploadProgress } : item)),
-          )
-        }, 200)
-
-        try {
-          // Upload to S3
-          await s3Client.send(new PutObjectCommand(uploadParams))
-          clearInterval(progressInterval)
-
-          // Update progress to 100%
-          setResumeQueue((prev) =>
-            prev.map((item, idx) => (idx === nextResumeIndex ? { ...item, progress: 100, status: "analyzing" } : item)),
-          )
-
-          // Get vendor details
-          const selectedVendorObj =
-            nextResume.vendorId === "no-vendor" ? null : vendors.find((v) => v.id === nextResume.vendorId)
-
-          // Analyze the resume
-          const analysisResult = await analyzeResume(
-            nextResume.file,
-            user?.uid || "anonymous",
-            user?.email || "anonymous@example.com",
-            nextResume.vendorId === "no-vendor" ? null : nextResume.vendorId,
-            selectedVendorObj?.name || null,
-          )
-
-          // Check if the analysis result indicates this is not a resume
-          if (
-            !analysisResult.analysis ||
-            !analysisResult.analysis.name ||
-            !analysisResult.analysis.key_skills ||
-            analysisResult.analysis.key_skills.length === 0
-          ) {
-            setResumeQueue((prev) =>
-              prev.map((item, idx) =>
-                idx === nextResumeIndex
-                  ? {
-                      ...item,
-                      status: "error",
-                      errorMessage:
-                        "This file does not appear to be a valid resume. No relevant information was extracted.",
-                    }
-                  : item,
-              ),
-            )
-
-            // Process next resume
-            setProcessedCount((prev) => prev + 1)
-            return
-          }
-
-          // Update with success
-          setResumeQueue((prev) =>
-            prev.map((item, idx) =>
-              idx === nextResumeIndex
-                ? {
-                    ...item,
-                    status: "success",
-                    result: analysisResult.analysis,
-                  }
-                : item,
-            ),
-          )
-
-          // Notify user of successful analysis
-          toast({
-            title: "Resume Analyzed",
-            description: `${nextResume.file.name} has been successfully analyzed and added to your profile.`,
-            variant: "default",
-          })
-        } catch (error) {
-          clearInterval(progressInterval)
-          console.error("Error in upload/analysis:", error)
-
-          // Update with error
-          setResumeQueue((prev) =>
-            prev.map((item, idx) =>
-              idx === nextResumeIndex
-                ? {
-                    ...item,
-                    status: "error",
-                    errorMessage: error instanceof Error ? error.message : "Unknown error",
-                  }
-                : item,
-            ),
-          )
-        }
-      } catch (error) {
+        toast({
+          title: "Resume processed successfully",
+          description: `${file.name} has been analyzed and saved.`,
+        })
+      } catch (error: any) {
         console.error("Error processing resume:", error)
 
         // Update with error
-        setResumeQueue((prev) =>
-          prev.map((item, idx) =>
-            idx === nextResumeIndex
-              ? {
-                  ...item,
-                  status: "error",
-                  errorMessage: error instanceof Error ? error.message : "Unknown error",
-                }
-              : item,
-          ),
-        )
-      } finally {
-        // Increment processed count and continue to next resume
+        resumeToProcess.status = "error"
+        resumeToProcess.progress = 100
+        resumeToProcess.errorMessage = error.message || "Unknown error occurred"
+        
+        updatedQueue[nextResumeIndex] = resumeToProcess
+        setResumeQueue(updatedQueue)
         setProcessedCount((prev) => prev + 1)
+
+        toast({
+          variant: "destructive",
+          title: "Error processing resume",
+          description: resumeToProcess.errorMessage,
+        })
       }
     }
 
-    if (isProcessing && resumeQueue.some((item) => item.status === "queued")) {
+    // Call the process function if we're processing
+    if (isProcessing) {
       processNextResume()
     }
-  }, [resumeQueue, isProcessing, processedCount, user, vendors, toast])
+  }, [resumeQueue, isProcessing, user, selectedVendor, vendors, toast])
 
   // Function to validate if a file is actually a resume
   const validateResumeContent = async (file: File): Promise<{ valid: boolean; message?: string }> => {

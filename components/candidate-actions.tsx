@@ -8,11 +8,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Calendar as CalendarIcon, DollarSign } from "lucide-react"
-import { doc, writeBatch, getDoc, serverTimestamp, increment } from 'firebase/firestore'
-import { db } from '@/FirebaseConfig'
 import { toast } from 'sonner'
 import type { Candidate, CandidateStatus } from '@/app/jobs/[jobId]/candidates/page'
 import { useAuth } from "@/context/auth-context"
+import apiClient from "@/lib/api-client"
 
 export function CandidateActions({ 
   candidate, 
@@ -31,92 +30,16 @@ export function CandidateActions({
 
   const updateCandidateStatus = async (candidate: Candidate, status: CandidateStatus, additionalData = {}) => {
     try {
-      const batch = writeBatch(db);
+      // Use the API client to update candidate status
+      await apiClient.jobs.updateCandidateStatus(
+        jobId,
+        candidate.filename, // Using filename as the candidateId
+        status,
+        additionalData
+      );
       
-      // Get reference to primary source: resumes/details document
-      const resumesDetailsRef = doc(db, "jobs", jobId, "resumes", "details");
-      const resumesDetailsDoc = await getDoc(resumesDetailsRef);
-      
-      if (!resumesDetailsDoc.exists()) {
-        throw new Error("Resumes details document not found");
-      }
-
-      const currentData = resumesDetailsDoc.data();
-      const timestamp = new Date().toISOString();
-      
-      // Update the candidate's status and tracking info
-      const updatedCandidates = currentData.relevant_candidates.map((c: Candidate) => {
-        if (c.filename === candidate.filename) {
-          return {
-            ...c,
-            tracking: {
-              ...c.tracking,
-              status,
-              statusHistory: [
-                ...(c.tracking?.statusHistory || []),
-                {
-                  status,
-                  timestamp,
-                  updatedBy: user?.email || 'unknown',
-                  ...additionalData
-                }
-              ],
-              lastUpdated: timestamp,
-              updatedBy: user?.email || 'unknown',
-              ...additionalData
-            }
-          };
-        }
-        return c;
-      });
-
-      // Update the document with new data
-      batch.update(resumesDetailsRef, {
-        relevant_candidates: updatedCandidates,
-        'metadata.lastUpdated': serverTimestamp(),
-        [`statusCounts.${status}`]: increment(1),
-      });
-      
-      // Also update the old location for backward compatibility
-      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
-      const profilesDoc = await getDoc(relevantProfilesRef);
-      
-      if (profilesDoc.exists()) {
-        const oldData = profilesDoc.data();
-        const updatedOldCandidates = oldData.candidates?.map((c: Candidate) => {
-          if (c.filename === candidate.filename) {
-            return {
-              ...c,
-              tracking: {
-                ...c.tracking,
-                status,
-                statusHistory: [
-                  ...(c.tracking?.statusHistory || []),
-                  {
-                    status,
-                    timestamp,
-                    updatedBy: user?.email || 'unknown',
-                    ...additionalData
-                  }
-                ],
-                lastUpdated: timestamp,
-                updatedBy: user?.email || 'unknown',
-                ...additionalData
-              }
-            };
-          }
-          return c;
-        });
-        
-        batch.update(relevantProfilesRef, {
-          candidates: updatedOldCandidates,
-          'metadata.lastUpdated': serverTimestamp()
-        });
-      }
-
-      await batch.commit();
       onUpdate();
-      toast.success(`Status updated to ${status}`);
+      toast.success(`Status updated to ${status.replace('_', ' ')}`);
     } catch (error) {
       console.error("Error updating status:", error);
       toast.error("Failed to update status");
@@ -136,7 +59,7 @@ export function CandidateActions({
 
   const scheduleInterview = async (date: Date) => {
     try {
-      await updateCandidateStatus(candidate, 'interview_scheduled', { interviewDate: date });
+      await updateCandidateStatus(candidate, 'interview_scheduled', { interviewDate: date.toISOString() });
       setShowCalendar(false)
     } catch (error: unknown) {
       console.error('Error scheduling interview:', error);

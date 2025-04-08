@@ -1,8 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { db } from "@/FirebaseConfig"
-import { doc, getDoc, type Timestamp } from "firebase/firestore"
 import { useAuth } from "@/context/auth-context"
 import { Input } from "@/components/ui/input"
 import { Search, Briefcase, GraduationCap, MapPin, FileText, Filter, X, Sparkles } from "lucide-react"
@@ -17,12 +15,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ResumeCard } from "@/components/keyword-matcher/resume-card"
 import { ResumeDetailsDialog } from "@/components/keyword-matcher/resume-details-dialog"
 import { SortDropdown } from "@/components/keyword-matcher/sort-dropdown"
+import apiClient from "@/lib/api-client"
 
 // Resume interface
 interface Resume {
   filename: string
   filelink: string
-  uploadedAt: Timestamp
+  uploadedAt: Date
   analysis: {
     name: string
     education_details: Array<{
@@ -83,99 +82,85 @@ export default function KeywordMatcherPage() {
       setIsLoading(true)
 
       try {
-        const userDocRef = doc(db, "users", user.uid, "resumes", "data")
-        const userDoc = await getDoc(userDocRef)
-
+        // Fetch resumes using the API client
+        const userResumes = await apiClient.resumes.getUserResumes(user.uid);
+        
         const allKeywords = new Set<string>()
         const newEducationFilters = new Set<string>()
         const newLocations = new Set<string>()
         const fetchedResumes: Resume[] = []
 
-        if (userDoc.exists()) {
-          const userData = userDoc.data()
-          if (userData.resumes && Array.isArray(userData.resumes)) {
-            // Ensure each resume has the required properties
-            const validResumes = userData.resumes.map((resume: Resume) => {
-              // Ensure analysis object exists
-              if (!resume.analysis) {
-                resume.analysis = {
-                  name: "Unknown",
-                  education_details: [],
-                  work_experience_details: [],
-                  key_skills: [],
-                  profile_summary: "",
+        if (userResumes && Array.isArray(userResumes)) {
+          // Process each resume to ensure the required structure
+          const validResumes = userResumes.map((resume: any) => {
+            // Transform API response to match the expected Resume interface
+            const transformedResume: Resume = {
+              filename: resume.filename,
+              filelink: resume.filelink,
+              uploadedAt: new Date(resume.uploaded_at),
+              analysis: {
+                name: resume.analysis?.name || "Unknown",
+                education_details: resume.analysis?.education_details || [],
+                work_experience_details: resume.analysis?.work_experience_details || [],
+                key_skills: resume.analysis?.key_skills || [],
+                profile_summary: resume.analysis?.profile_summary || "",
+              }
+            };
+
+            return transformedResume;
+          });
+
+          fetchedResumes.push(...validResumes);
+
+          // Process the resumes to extract keywords, education, etc.
+          validResumes.forEach((resume: Resume) => {
+            // Process key skills
+            if (resume?.analysis?.key_skills && Array.isArray(resume.analysis.key_skills)) {
+              resume.analysis.key_skills.forEach((skill) => {
+                if (typeof skill === "string" && skill.trim()) {
+                  allKeywords.add(skill.toLowerCase().trim())
                 }
-              }
+              })
+            }
 
-              // Ensure education_details array exists
-              if (!resume.analysis.education_details) {
-                resume.analysis.education_details = []
-              }
+            // Process education
+            if (resume?.analysis?.education_details) {
+              resume.analysis.education_details.forEach((edu) => {
+                // Add degree information
+                if (edu.degree) {
+                  newEducationFilters.add(edu.degree.toLowerCase().trim())
+                }
+                // Add major information
+                if (edu.major) {
+                  newEducationFilters.add(edu.major.toLowerCase().trim())
+                }
+              })
+            }
 
-              // Ensure work_experience_details array exists
-              if (!resume.analysis.work_experience_details) {
-                resume.analysis.work_experience_details = []
-              }
+            // Process location from education details
+            if (resume?.analysis?.education_details) {
+              resume.analysis.education_details.forEach((edu) => {
+                if (edu.location) {
+                  newLocations.add(edu.location.toLowerCase().trim())
+                }
+              })
+            }
 
-              // Ensure key_skills array exists
-              if (!resume.analysis.key_skills) {
-                resume.analysis.key_skills = []
-              }
-
-              return resume
-            })
-
-            fetchedResumes.push(...validResumes)
-
-            userData.resumes.forEach((resume: Resume) => {
-              // Process key skills
-              if (resume?.analysis?.key_skills && Array.isArray(resume.analysis.key_skills)) {
-                resume.analysis.key_skills.forEach((skill) => {
-                  if (typeof skill === "string" && skill.trim()) {
-                    allKeywords.add(skill.toLowerCase().trim())
-                  }
-                })
-              }
-
-              // Process education
-              if (resume?.analysis?.education_details) {
-                resume.analysis.education_details.forEach((edu) => {
-                  // Add degree information
-                  if (edu.degree) {
-                    newEducationFilters.add(edu.degree.toLowerCase().trim())
-                  }
-                  // Add major information
-                  if (edu.major) {
-                    newEducationFilters.add(edu.major.toLowerCase().trim())
-                  }
-                })
-              }
-
-              // Process location from education details
-              if (resume?.analysis?.education_details) {
-                resume.analysis.education_details.forEach((edu) => {
-                  if (edu.location) {
-                    newLocations.add(edu.location.toLowerCase().trim())
-                  }
-                })
-              }
-
-              // Process experience years
-              if (resume?.analysis?.work_experience_details) {
-                let totalExperience = 0
-                resume.analysis.work_experience_details.forEach((exp) => {
-                  if (exp.dates) {
-                    const [startDate, endDate] = exp.dates.split("–").map((d) => d.trim())
-                    const end = endDate === "Present" ? new Date() : new Date(endDate)
-                    const start = new Date(startDate)
-                    const years = end.getFullYear() - start.getFullYear()
-                    totalExperience += years
-                  }
-                })
-                resume.analysis.experience_years = totalExperience
-              }
-            })
-          }
+            // Process experience years
+            if (resume?.analysis?.work_experience_details) {
+              let totalExperience = 0
+              resume.analysis.work_experience_details.forEach((exp) => {
+                if (exp.dates) {
+                  const [startDate, endDate] = exp.dates.split("–").map((d) => d.trim())
+                  const end = endDate === "Present" ? new Date() : new Date(endDate)
+                  const start = new Date(startDate)
+                  const years = end.getFullYear() - start.getFullYear()
+                  totalExperience += years
+                }
+              })
+              resume.analysis.experience_years = totalExperience
+            }
+          });
         }
 
         // Update state with found data
@@ -285,7 +270,7 @@ export default function KeywordMatcherPage() {
   // Sort resumes based on selected option
   const sortedResumes = [...filteredResumes].sort((a, b) => {
     if (sortOption === "recent") {
-      return b.uploadedAt.seconds - a.uploadedAt.seconds
+      return b.uploadedAt.getTime() - a.uploadedAt.getTime()
     } else if (sortOption === "experience") {
       return (b.analysis.experience_years || 0) - (a.analysis.experience_years || 0)
     } else if (sortOption === "relevance") {
