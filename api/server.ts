@@ -1,83 +1,114 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-// Import your routes
-import vendorRoutes from './routes/vendor';
-import resumeRoutes from './routes/resume';
+import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth';
+import resumeRoutes from './routes/resume';
 import jobRoutes from './routes/job';
+import vendorRoutes from './routes/vendor';
+import { corsOptions } from './config/cors';
 
+// Load environment variables
 dotenv.config();
 
-// For development testing purposes
-if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
-  console.log('Running in development mode');
-  process.env.BYPASS_AUTH = 'true';
-}
-
-console.log(`Auth bypass: ${process.env.BYPASS_AUTH === 'true' ? 'enabled' : 'disabled'}`);
-
 // MongoDB Connection Setup
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://praneethdevarasetty31:8qgJLzdzAjMvKssx@cluster0.myjyejx.mongodb.net/?retryWrites=true&w=majority';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/test';
 
 if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable');
+  console.error('No MongoDB URI provided');
+  process.exit(1);
 }
 
-// Initialize MongoDB connection
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => {
-    console.error('Failed to connect to MongoDB', err);
-    console.log('Continuing without MongoDB connection');
-  });
-
+// Express app setup
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
-// CORS configuration - Fix for credentials with specific origin
-app.use(cors({
-  origin: 'http://localhost:3000', // Specify the exact origin instead of wildcard '*'
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+// Enable CORS - must be before other middleware
+app.use(cors(corsOptions));
+
+// Add CORS headers to all responses
+app.use((req, res, next) => {
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400'); // 24 hours
+    return res.status(204).end();
+  }
+  
+  // For non-OPTIONS requests
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  next();
+});
+
+// Security middleware
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: false
 }));
 
-// Other middleware
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // limit each IP to 1000 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
+
+// JSON body parser
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Root endpoint - health check
+app.get('/api/health', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', message: 'API is running' });
+});
+
 // Mount API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/vendors', vendorRoutes);
 app.use('/api/resumes', resumeRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api/vendors', vendorRoutes);
 
-// Basic routes for testing
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'API is running' });
+// Error handling middleware
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong' });
 });
 
-app.get('/api/test', (req, res) => {
-  res.status(200).json({ message: 'Test endpoint working' });
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ error: 'Route not found' });
 });
 
-// Start server
-const server = app.listen(parseInt(PORT.toString()), '0.0.0.0', () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
-
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  server.close(() => {
-    console.log('HTTP server closed');
-    mongoose.connection.close().then(() => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
+// Initialize MongoDB connection
+mongoose.connect(MONGODB_URI)
+  .then(async () => {
+    console.log('Connected to MongoDB');
+    
+    // Run database initialization checks
+    try {
+      const { initializeDatabase } = await import('./utils/db-init');
+      await initializeDatabase();
+    } catch (initError) {
+      console.error('Error during database initialization:', initError);
+    }
+    
+    // Start the server after DB checks are complete
+    app.listen(PORT, () => {
+      console.log(`Server running at http://localhost:${PORT}`);
+      console.log(`CORS enabled for frontend access`);
     });
+  })
+  .catch((err: Error) => {
+    console.error('MongoDB connection error:', err);
   });
-});
 
 export default app;

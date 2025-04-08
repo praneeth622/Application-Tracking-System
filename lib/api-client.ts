@@ -2,12 +2,55 @@ import { getAuth } from "firebase/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
 
+// Add request tracking to prevent duplicate simultaneous requests
+const pendingRequests = new Map();
+
+// Helper function to get authentication token
+const getAuthToken = async (forceRefresh = false): Promise<string | null> => {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  
+  if (!user) {
+    return null;
+  }
+  
+  try {
+    return await user.getIdToken(forceRefresh);
+  } catch (error) {
+    console.error("Error getting auth token:", error);
+    return null;
+  }
+};
+
+// Create headers with authorization token
+const createHeaders = async (additionalHeaders: Record<string, string> = {}, skipAuth = false): Promise<Record<string, string>> => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...additionalHeaders,
+  };
+  
+  if (!skipAuth) {
+    const token = await getAuthToken(false);
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  
+  return headers;
+};
+
+// Generate a request key for deduplication
+const getRequestKey = (url: string, method: string, body: any): string => {
+  return `${method}:${url}:${JSON.stringify(body || {})}`;
+};
+
 // Define types for the API client
 interface FetchParams {
   url: string;
   method?: string;
   body?: any;
   headers?: Record<string, string>;
+  skipAuth?: boolean;
 }
 
 interface UserData {
@@ -42,7 +85,6 @@ interface VendorData {
   status?: string;
 }
 
-// Add Job related interfaces
 interface JobData {
   _id?: string;
   title: string;
@@ -76,73 +118,80 @@ interface JobData {
   assigned_recruiters?: string[];
 }
 
-// Helper function to get authentication token
-const getAuthToken = async (): Promise<string | null> => {
-  const auth = getAuth();
-  const user = auth.currentUser;
+// Generic fetch function with authentication and deduplication
+export const fetcher = async ({ 
+  url, 
+  method = 'GET', 
+  body = null, 
+  headers = {},
+  skipAuth = false
+}: FetchParams): Promise<any> => {
+  // Normalize the URL to avoid duplicate slashes
+  const normalizedUrl = url.startsWith('/') ? url : `/${url}`;
+  const apiUrl = `${API_BASE_URL}${normalizedUrl}`;
+  const requestKey = getRequestKey(apiUrl, method, body);
   
-  if (!user) {
-    return null;
+  // Log only for GET requests to reduce console noise
+  if (method === 'GET') {
+    console.log(`API Request: ${method} ${apiUrl}`);
   }
   
-  return await user.getIdToken();
-};
-
-// Create headers with authorization token
-const createHeaders = async (additionalHeaders: Record<string, string> = {}): Promise<Record<string, string>> => {
-  const token = await getAuthToken();
+  // Check if there's an identical request in progress
+  if (pendingRequests.has(requestKey)) {
+    console.log(`Reusing pending request for: ${method} ${normalizedUrl}`);
+    return pendingRequests.get(requestKey);
+  }
   
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    ...additionalHeaders,
-  };
-};
-
-// Generic fetch function with authentication
-export const fetcher = async ({ url, method = 'GET', body = null, headers = {} }: FetchParams): Promise<any> => {
   try {
-    // Log the API request
-    console.log(`Making API request: ${method} ${API_BASE_URL}${url}`);
-    
-    // Normalize the URL to avoid duplicate slashes
-    const normalizedUrl = url.startsWith('/') ? url : `/${url}`;
-    const apiUrl = `${API_BASE_URL}${normalizedUrl}`;
-    
-    console.log(`Full URL: ${apiUrl}`);
-    
-    const response = await fetch(apiUrl, {
-      method,
-      headers: await createHeaders(headers),
-      credentials: 'include',
-      body: body ? JSON.stringify(body) : null,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorData;
+    // Create a promise for this request
+    const requestPromise = (async () => {
+      const finalHeaders = await createHeaders(headers, skipAuth);
       
       try {
-        errorData = JSON.parse(errorText);
-      } catch (e) {
-        errorData = { message: errorText };
-      }
-      
-      console.error(`API Error (${response.status}):`, errorData);
-      
-      // Create a more informative error
-      const error = new Error(`HTTP error! status: ${response.status}`);
-      (error as any).status = response.status;
-      (error as any).statusText = response.statusText;
-      (error as any).data = errorData;
-      
-      throw error;
-    }
+        const response = await fetch(apiUrl, {
+          method,
+          headers: finalHeaders,
+          credentials: 'include',
+          body: body ? JSON.stringify(body) : null,
+          mode: 'cors'
+        });
 
-    const data = await response.json();
-    return data;
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorData;
+          
+          try {
+            errorData = JSON.parse(errorText);
+          } catch (e) {
+            errorData = { message: errorText };
+          }
+          
+          const error = new Error(`HTTP error! status: ${response.status}`);
+          (error as any).status = response.status;
+          (error as any).statusText = response.statusText;
+          (error as any).data = errorData;
+          
+          console.error(`API Error (${response.status}):`, errorData);
+          throw error;
+        }
+
+        return await response.json();
+      } catch (error) {
+        console.error(`API Request failed: ${method} ${normalizedUrl}`, error);
+        throw error;
+      } finally {
+        // Remove this request from pending requests when done
+        pendingRequests.delete(requestKey);
+      }
+    })();
+    
+    // Store the pending request
+    pendingRequests.set(requestKey, requestPromise);
+    
+    return await requestPromise;
   } catch (error) {
-    console.error('API Request failed:', error);
+    // Remove from pending requests on error
+    pendingRequests.delete(requestKey);
     throw error;
   }
 };
@@ -151,10 +200,39 @@ export const fetcher = async ({ url, method = 'GET', body = null, headers = {} }
 const apiClient = {
   // Auth API
   auth: {
-    getCurrentUser: () => fetcher({ url: '/auth/me' }),
-    updateUser: (data: Partial<UserData>) => fetcher({ url: '/auth/me', method: 'PUT', body: data }),
-    getAllUsers: () => fetcher({ url: '/auth/users' }),
-    updateUserRole: (data: { uid: string; role: string }) => fetcher({ url: '/auth/users/role', method: 'PUT', body: data }),
+    getCurrentUser: async () => {
+      try {
+        const response = await fetcher({ url: '/auth/me' });
+        return response;
+      } catch (error) {
+        if ((error as any).status === 404) {
+          throw new Error('User not found in database');
+        }
+        throw error;
+      }
+    },
+    updateUser: (data: Partial<UserData>) => 
+      fetcher({ url: '/auth/me', method: 'PUT', body: data }),
+    getAllUsers: () => 
+      fetcher({ url: '/auth/users' }),
+    updateUserRole: (data: { uid: string; role: string }) => 
+      fetcher({ url: '/auth/users/role', method: 'PUT', body: data }),
+    createFromAuth: (data: {uid: string, email: string, name?: string}) => {
+      return fetcher({ 
+        url: '/auth/create-from-auth', 
+        method: 'POST', 
+        body: data, 
+        skipAuth: true 
+      });
+    },
+    makeAdmin: (data: {uid: string, email: string}) => {
+      return fetcher({ 
+        url: '/auth/make-admin', 
+        method: 'POST', 
+        body: data, 
+        skipAuth: true 
+      });
+    },
   },
   
   // Resume API
@@ -169,10 +247,24 @@ const apiClient = {
       method: 'POST', 
       body: resumeData 
     }),
-    getAllResumes: () => fetcher({
-      url: '/resumes/all',
-      method: 'GET'
-    }),
+    getAllResumes: async () => {
+      try {
+        // Try to fetch all resumes (admin only)
+        const data = await fetcher({
+          url: '/resumes/admin/all',
+          method: 'GET'
+        });
+        return data;
+      } catch (error) {
+        // If access is denied due to not being admin, log it clearly
+        if ((error as any).status === 403) {
+          console.log('Access to all resumes denied: Admin privileges required');
+          return []; // Return empty array instead of throwing
+        }
+        // For other errors, rethrow
+        throw error;
+      }
+    },
     getUserResumes: (id: string) => {
       console.log('Getting resumes for user:', id);
       return fetcher({ 
@@ -196,33 +288,22 @@ const apiClient = {
 
   // Job API
   jobs: {
-    // Get all jobs
     getAll: () => fetcher({ url: '/jobs' }),
-    
-    // Get a job by ID
     getById: (id: string) => fetcher({ url: `/jobs/${id}` }),
-    
-    // Create a new job
     create: (data: Omit<JobData, '_id'>) => fetcher({ 
       url: '/jobs', 
       method: 'POST', 
       body: data 
     }),
-    
-    // Update an existing job
     update: (id: string, data: Partial<JobData>) => fetcher({ 
       url: `/jobs/${id}`, 
       method: 'PUT', 
       body: data 
     }),
-    
-    // Delete a job
     delete: (id: string) => fetcher({ 
       url: `/jobs/${id}`, 
       method: 'DELETE' 
     }),
-    
-    // Get candidates for a job
     getCandidates: (jobId: string) => fetcher({
       url: `/jobs/${jobId}/candidates`
     }),

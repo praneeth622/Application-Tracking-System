@@ -12,8 +12,22 @@ import {
   getAllResumesForMatching
 } from '../controllers/jobController';
 import { authenticate, isAdmin } from '../middlewares/authMiddleware';
+import cors from 'cors';
+import { corsOptions } from '../config/cors';
 
 const router = express.Router();
+
+// Apply CORS to all job routes
+router.use(cors(corsOptions));
+
+// Handle OPTIONS requests explicitly for all routes in this router
+router.options('*', cors(corsOptions));
+
+// Add explicit preflight handling for high-traffic routes
+router.options('/', cors(corsOptions));
+router.options('/resumes/all', cors(corsOptions));
+router.options('/:id/candidates', cors(corsOptions));
+router.options('/:id/candidates/:candidateId/status', cors(corsOptions));
 
 // Apply authentication middleware to all routes
 router.use(authenticate);

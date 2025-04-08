@@ -171,3 +171,29 @@ export const deleteResume = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ error: 'Failed to delete resume' });
   }
 };
+
+// Add this new function to get all resumes (for admin users)
+export const getAllResumes = async (req: AuthRequest, res: Response) => {
+  try {
+    // Only admin users should be allowed to access all resumes
+    console.log('Getting all resumes, user role:', req.user?.role);
+    
+    if (!req.user) {
+      console.log('User not authenticated for getAllResumes');
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    if (req.user.role !== 'admin') {
+      console.log('User not authorized to access all resumes:', req.user.uid);
+      return res.status(403).json({ error: 'Not authorized to access all resumes' });
+    }
+
+    // Get all resumes
+    const resumes = await Resume.find({}).sort({ uploaded_at: -1 });
+    console.log(`Found ${resumes.length} resumes in total`);
+    return res.status(200).json(resumes);
+  } catch (error) {
+    console.error('Error fetching all resumes:', error);
+    return res.status(500).json({ error: 'Failed to fetch all resumes' });
+  }
+};
