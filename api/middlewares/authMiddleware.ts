@@ -14,47 +14,6 @@ export interface AuthenticatedRequest extends Request {
 
 // Middleware to authenticate users with Firebase
 export const authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  console.log('[AUTH] Authenticating request to:', req.method, req.originalUrl);
-  
-  // If bypass auth is enabled, skip authentication
-  if (process.env.BYPASS_AUTH === 'true') {
-    console.log('[AUTH] Bypassing authentication in development mode');
-    
-    // For GET requests with userId in query params
-    if (req.method === 'GET' && req.query.userId) {
-      const queryUserId = req.query.userId as string;
-      console.log('[AUTH] Using userId from query:', queryUserId);
-      
-      req.user = {
-        uid: queryUserId,
-        email: 'dev@example.com',
-        role: 'user',
-      };
-      return next();
-    }
-    
-    // For POST/PUT requests with userId in the body
-    if ((req.method === 'POST' || req.method === 'PUT') && req.body && req.body.userId) {
-      console.log('[AUTH] Using userId from body:', req.body.userId);
-      
-      req.user = {
-        uid: req.body.userId,
-        email: 'dev@example.com',
-        role: 'user',
-      };
-      return next();
-    }
-    
-    // Default test user for other requests
-    console.log('[AUTH] Using default test user');
-    req.user = {
-      uid: 'test-user-123',
-      email: 'dev@example.com',
-      role: 'user',
-    };
-    return next();
-  }
-
   try {
     // Check if the authorization header exists
     const authHeader = req.headers.authorization;
@@ -90,14 +49,43 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
 };
 
 // Middleware to check if user has admin role
-export const isAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'User not authenticated' });
+export const isAdmin = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    console.log('--- isAdmin middleware check starting ---');
+    console.log('User from request:', req.user);
+    
+    if (!req.user) {
+      console.log('Admin check failed: No user in request');
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    // Get the user's role from the database to ensure it's up to date
+    const user = await User.findOne({ uid: req.user.uid });
+    console.log('Admin check for user ID:', req.user.uid);
+    
+    if (!user) {
+      console.log('Admin check failed: User not found in database');
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('User found in database:', {
+      uid: user.uid,
+      email: user.email,
+      role: user.role
+    });
+    
+    if (user.role !== 'admin') {
+      console.log('Admin check failed: User role is not admin, got:', user.role);
+      return res.status(403).json({ error: 'Not authorized: Admin access required' });
+    }
+    
+    // Update the req.user with the latest role information
+    req.user.role = user.role;
+    console.log('Admin check successful, proceeding with request');
+    
+    next();
+  } catch (error) {
+    console.error('Error in isAdmin middleware:', error);
+    res.status(500).json({ error: 'Error checking admin status' });
   }
-  
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Not authorized: Admin access required' });
-  }
-  
-  return next();
 };

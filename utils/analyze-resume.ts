@@ -137,7 +137,7 @@ export async function analyzeResume(
       analysis: analysisJson,
       vendor_id: vendorId,
       vendor_name: vendorName,
-      userId: userId  // Add the userId here
+      user_id: userId  
     };
     
     const savedData = await apiClient.resumes.saveResume(resumeData);
