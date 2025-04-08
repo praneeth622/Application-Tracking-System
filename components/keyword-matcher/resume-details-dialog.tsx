@@ -4,7 +4,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Briefcase, GraduationCap, MapPin, Calendar, Download, Sparkles, Eye } from "lucide-react"
-import type { Timestamp } from "firebase/firestore"
 
 interface ResumeAnalysis {
   name: string
@@ -30,7 +29,7 @@ interface ResumeAnalysis {
 interface Resume {
   filename: string
   filelink: string
-  uploadedAt: Timestamp
+  uploadedAt: Date
   analysis: ResumeAnalysis
 }
 

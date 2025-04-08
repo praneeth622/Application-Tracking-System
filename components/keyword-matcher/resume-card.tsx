@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
 import { Briefcase, GraduationCap, Clock, Eye, Download } from "lucide-react"
-import type { Timestamp } from "firebase/firestore"
 
 interface ResumeAnalysis {
   name: string
@@ -34,7 +33,7 @@ interface ResumeCardProps {
   resume: {
     filename: string
     filelink: string
-    uploadedAt: Timestamp
+    uploadedAt: Date
     analysis: ResumeAnalysis
   }
   index: number
@@ -96,6 +95,7 @@ export function ResumeCard({
                   </div>
                 )}
 
+                {experienceYears !== undefined && (
                   <div className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-emerald-500" />
                     <span>
@@ -119,11 +119,9 @@ export function ResumeCard({
                     className={`text-sm font-medium ${
                       calculateMatchScore(resume) > 80
                         ? "text-emerald-600 dark:text-emerald-400"
-
-                        : matchScore > 50
+                        : calculateMatchScore(resume) > 50
                         ? "text-amber-600 dark:text-amber-400"
                         : "text-red-600 dark:text-red-400"
-
                     }`}
                   >
                     {calculateMatchScore(resume)}%
@@ -147,7 +145,7 @@ export function ResumeCard({
                     className={`
                       px-2 py-0.5 text-xs font-medium
                       ${
-                        isSkillHighlighted(skill)
+                        isHighlighted(skill)
                           ? "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-800 dark:text-violet-300"
                           : "bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700"
                       }
@@ -157,6 +155,7 @@ export function ResumeCard({
                   </Badge>
                 ))}
 
+              {keySkills.length > 8 && !expandedSkills && (
                 <Badge
                   variant="outline"
                   className="px-2 py-0.5 text-xs cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-900/20"
@@ -183,7 +182,7 @@ export function ResumeCard({
         {/* Actions footer */}
         <div className="p-3 flex items-center justify-between bg-violet-50/50 dark:bg-violet-900/10">
           <div className="text-xs text-muted-foreground">
-            Uploaded {new Date(resume.uploadedAt.seconds * 1000).toLocaleDateString()}
+            Uploaded {resume.uploadedAt.toLocaleDateString()}
           </div>
           <div className="flex items-center gap-2">
             <Button

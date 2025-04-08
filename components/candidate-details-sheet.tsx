@@ -2,11 +2,9 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import type { Candidate, CandidateStatus } from "@/app/jobs/[jobId]/candidates/page"
 import { format } from "date-fns"
-import { doc, onSnapshot, updateDoc, arrayUnion } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
 import {
   Check,
   Circle,
@@ -28,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import apiClient from "@/lib/api-client"
 
 const getStatusOrder = (status: CandidateStatus): number => {
   const order: Record<CandidateStatus, number> = {
@@ -94,69 +93,119 @@ export function CandidateDetailsSheet({
     setCandidate(initialCandidate)
   }, [initialCandidate])
 
-  useEffect(() => {
-    if (!isOpen || !jobId || !initialCandidate) return
-
-    // Set up real-time listener for candidate updates
-    const unsubscribe = onSnapshot(
-      doc(db, "jobs", jobId, "relevant_profiles", "profiles"),
-      (doc) => {
-        if (doc.exists()) {
-          const data = doc.data()
-          const updatedCandidate = data.candidates?.find((c: Candidate) => c.filename === initialCandidate.filename)
-          if (updatedCandidate) {
-            setCandidate(updatedCandidate)
-          }
-        }
-      },
-      (error) => {
-        console.error("Error in real-time candidate updates:", error)
-      },
-    )
-
-    // Cleanup subscription on unmount
-    return () => unsubscribe()
-  }, [jobId, initialCandidate, isOpen])
-
-  const handleStatusChange = async (newStatus: CandidateStatus) => {
-    if (!candidate || !jobId) return
+  // Function to fetch the latest candidate data
+  const fetchCandidate = useCallback(async () => {
+    if (!isOpen || !jobId || !initialCandidate) return;
 
     try {
-      const profilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles")
-      const now = new Date().toISOString()
+      console.log(`Fetching candidate updates for ${initialCandidate.filename}`);
+      
+      // Get all candidates for the job
+      const candidates = await apiClient.jobs.getCandidates(jobId);
+      
+      // Find the specific candidate we're looking at
+      const updatedCandidate = candidates.find((c: Candidate) => c.filename === initialCandidate.filename);
+      
+      if (updatedCandidate) {
+        console.log('Found updated candidate with tracking:', updatedCandidate.tracking);
+        setCandidate(updatedCandidate);
+      } else {
+        console.warn(`Candidate ${initialCandidate.filename} not found in updated data`);
+      }
+    } catch (error) {
+      console.error("Error fetching candidate update:", error);
+    }
+  }, [jobId, initialCandidate, isOpen]);
 
-      const updatedCandidate = {
-        ...candidate,
-        tracking: {
-          ...candidate.tracking,
-          status: newStatus,
-          lastUpdated: now,
-          statusHistory: [
-            ...(candidate.tracking?.statusHistory || []),
-            {
-              status: newStatus,
-              timestamp: now,
-            },
-          ],
-          ...(newStatus === "interview_scheduled" ? { interviewDate: now } : {}),
-        },
+  // Set up polling for candidate updates when sheet is open
+  useEffect(() => {
+    if (!isOpen || !jobId || !initialCandidate) return;
+    
+    // Initial fetch
+    fetchCandidate();
+    
+    // Set up polling interval (every 3 seconds)
+    const intervalId = setInterval(fetchCandidate, 3000);
+    
+    // Clean up interval on unmount or when sheet closes
+    return () => clearInterval(intervalId);
+  }, [jobId, initialCandidate, isOpen, fetchCandidate]);
+
+  const handleStatusChange = async (newStatus: CandidateStatus) => {
+    if (!candidate || !jobId) return;
+
+    try {
+      // Show loading toast
+      const loadingId = toast.loading(`Updating status to ${newStatus.replace("_", " ")}...`);
+      
+      // Determine if we should include additional data based on status
+      let additionalData = {};
+      
+      if (newStatus === "interview_scheduled") {
+        additionalData = { 
+          interviewDate: new Date().toISOString() 
+        };
+      } else if (newStatus === "rate_confirmed") {
+        // For rate confirmed, we should use a proper rate
+        // In a real app, you would prompt for this value
+        additionalData = { 
+          rateConfirmed: 50 // default rate or you can implement a dialog to ask the user
+        };
+      } else if (newStatus === "contacted") {
+        additionalData = { 
+          contactedDate: new Date().toISOString() 
+        };
       }
 
-      await updateDoc(profilesRef, {
-        candidates: arrayUnion(updatedCandidate),
-      })
+      // Use the API client to update candidate status
+      const result = await apiClient.jobs.updateCandidateStatus(
+        jobId,
+        candidate.filename, // Using filename as the candidateId
+        newStatus,
+        additionalData
+      );
 
-      onUpdate()
-      toast.success(`Status updated to ${newStatus.replace("_", " ")}`)
+      console.log('Status update result:', JSON.stringify(result, null, 2));
+      console.log('Tracking data returned by API:', result?.tracking ? JSON.stringify(result.tracking, null, 2) : 'No tracking data');
+
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingId);
+      toast.success(`Status updated to ${newStatus.replace("_", " ")}`);
+      
+      // If the API returned updated tracking data, update it immediately
+      if (result && result.tracking && candidate) {
+        setCandidate({
+          ...candidate,
+          tracking: result.tracking
+        });
+      }
+      
+      // First trigger parent component update to refresh list
+      await onUpdate();
+      
+      // Wait a moment to ensure database updates propagate
+      setTimeout(async () => {
+        // Then fetch the updated candidate data again
+        await fetchCandidate();
+      }, 1000);
     } catch (error) {
-      console.error("Error updating status:", error)
-      toast.error("Failed to update status")
+      console.error("Error updating status:", error);
+      
+      // Show more helpful error message
+      let errorMessage = "Failed to update status";
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      }
+      
+      toast.error(errorMessage);
     }
   }
 
   const downloadResume = () => {
-    // This would be implemented to download the actual resume file
+    // This would be implemented to download the actual resume file from the API
     toast.success("Resume download started")
+    // TODO: Implement resume download using API client
+    // Example: apiClient.resumes.download(candidate.filename)
   }
 
   if (!candidate) return null

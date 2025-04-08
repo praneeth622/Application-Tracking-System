@@ -28,9 +28,8 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAuth } from "@/context/auth-context"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
-import { collection, getDocs, doc, getDoc, updateDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
+import apiClient from "@/lib/api-client"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,23 +42,25 @@ import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 interface Vendor {
-  vendor_id: string
-  name: string
-  contact_person: string
-  email: string
-  phone: string
-  address: string
-  state: string
-  country: string
-  created_at: Date
-  status: "active" | "inactive"
-  metadata: {
-    created_by: string
-    last_modified_by: string
+  _id: string;
+  name: string;
+  contact_person: string;
+  email: string;
+  phone: string;
+  address: string;
+  state: string;
+  country: string;
+  created_at: Date;
+  updated_at?: Date;
+  status: "active" | "inactive";
+  metadata?: {
+    created_by: string;
+    created_by_id: string;
+    last_modified_by: string;
   }
 }
 
-type VendorFormState = Omit<Vendor, "vendor_id" | "created_at" | "metadata">
+type VendorFormState = Omit<Vendor, "_id" | "created_at" | "updated_at" | "metadata">
 
 const VendorDetailsSheet = memo(
   ({
@@ -139,20 +140,16 @@ const VendorDetailsSheet = memo(
       if (!editData.selectedVendor || !editData.formState) return
 
       try {
-        const vendorDetailsRef = doc(db, "vendors", editData.selectedVendor.vendor_id, "details", "info")
-
-        await updateDoc(vendorDetailsRef, {
-          ...editData.formState,
-          metadata: {
-            ...editData.selectedVendor.metadata,
-            last_modified_by: user?.email || "",
-          },
-        })
+        // Use API client to update vendor
+        const updatedVendor = await apiClient.vendors.update(
+          editData.selectedVendor._id,
+          editData.formState
+        );
 
         // Update local state
         setVendors((prevVendors) =>
           prevVendors.map((vendor) =>
-            vendor.vendor_id === editData.selectedVendor?.vendor_id
+            vendor._id === editData.selectedVendor?._id
               ? {
                   ...vendor,
                   ...editData.formState!,
@@ -165,11 +162,7 @@ const VendorDetailsSheet = memo(
           ),
         )
 
-        toast({
-          title: "Success",
-          description: "Vendor updated successfully",
-          className: "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-900/30",
-        })
+        toast.success("Vendor updated successfully");
 
         // Reset edit state
         setEditData((prev) => ({
@@ -181,11 +174,7 @@ const VendorDetailsSheet = memo(
         }))
       } catch (error) {
         console.error("Error updating vendor:", error)
-        toast({
-          title: "Error",
-          description: "Failed to update vendor",
-          variant: "destructive",
-        })
+        toast.error("Failed to update vendor")
       }
     }
 
@@ -239,7 +228,7 @@ const VendorDetailsSheet = memo(
                     {editData.selectedVendor.status}
                   </Badge>
                   <span className="text-sm text-muted-foreground">
-                    ID: {editData.selectedVendor.vendor_id.substring(0, 8)}
+                    ID: {editData.selectedVendor._id.substring(0, 8)}
                   </span>
                 </div>
               </div>
@@ -436,11 +425,11 @@ const VendorDetailsSheet = memo(
                       </div>
                       <div className="flex items-center justify-between py-2 border-b border-border/30">
                         <span className="text-sm">Vendor ID</span>
-                        <span className="text-sm font-mono">{editData.selectedVendor.vendor_id.substring(0, 12)}</span>
+                        <span className="text-sm font-mono">{editData.selectedVendor._id.substring(0, 12)}</span>
                       </div>
                       <div className="flex items-center justify-between py-2">
                         <span className="text-sm">Created</span>
-                        <span className="text-sm">{editData.selectedVendor.created_at.toLocaleDateString()}</span>
+                        <span className="text-sm">{new Date(editData.selectedVendor.created_at).toLocaleDateString()}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -462,11 +451,11 @@ const VendorDetailsSheet = memo(
                     <div className="space-y-1">
                       <p className="font-medium">Vendor Created</p>
                       <p className="text-sm text-muted-foreground">
-                        {editData.selectedVendor.created_at.toLocaleDateString()} at{" "}
-                        {editData.selectedVendor.created_at.toLocaleTimeString()}
+                        {new Date(editData.selectedVendor.created_at).toLocaleDateString()} at{" "}
+                        {new Date(editData.selectedVendor.created_at).toLocaleTimeString()}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        By {editData.selectedVendor.metadata.created_by || "Unknown"}
+                        By {editData.selectedVendor.metadata?.created_by || "Unknown"}
                       </p>
                     </div>
                   </div>
@@ -476,7 +465,7 @@ const VendorDetailsSheet = memo(
                     <div className="space-y-1">
                       <p className="font-medium">Last Modified</p>
                       <p className="text-sm text-muted-foreground">
-                        By {editData.selectedVendor.metadata.last_modified_by || "Not modified yet"}
+                        By {editData.selectedVendor.metadata?.last_modified_by || "Not modified yet"}
                       </p>
                     </div>
                   </div>
@@ -555,43 +544,19 @@ export default function VendorPage() {
       if (!user) return
 
       try {
-        const vendorsCollection = collection(db, "vendors")
-        const vendorsSnapshot = await getDocs(vendorsCollection)
-        const fetchedVendors: Vendor[] = []
-
-        for (const vendorDoc of vendorsSnapshot.docs) {
-          const vendorDataRef = doc(db, "vendors", vendorDoc.id, "details", "info")
-          const vendorDataSnap = await getDoc(vendorDataRef)
-
-          if (vendorDataSnap.exists()) {
-            const data = vendorDataSnap.data()
-            fetchedVendors.push({
-              vendor_id: vendorDoc.id,
-              name: data.name,
-              contact_person: data.contact_person,
-              email: data.email,
-              phone: data.phone,
-              address: data.address,
-              state: data.state,
-              country: data.country,
-              created_at: data.created_at.toDate(),
-              status: data.status,
-              metadata: data.metadata || {
-                created_by: "",
-                last_modified_by: "",
-              },
-            })
-          }
-        }
-
-        setVendors(fetchedVendors)
+        const fetchedVendors = await apiClient.vendors.getAll();
+        
+        // Transform response to match component's expected format
+        const formattedVendors = fetchedVendors.map(vendor => ({
+          ...vendor,
+          created_at: new Date(vendor.created_at),
+          updated_at: vendor.updated_at ? new Date(vendor.updated_at) : undefined
+        }));
+        
+        setVendors(formattedVendors);
       } catch (error) {
         console.error("Error fetching vendors:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load vendors",
-          variant: "destructive",
-        })
+        toast.error("Failed to load vendors")
       } finally {
         setIsLoading(false)
       }
@@ -819,7 +784,7 @@ export default function VendorPage() {
             >
               <AnimatePresence>
                 {filteredVendors.map((vendor) => (
-                  <motion.div key={vendor.vendor_id} variants={itemVariants} layout>
+                  <motion.div key={vendor._id} variants={itemVariants} layout>
                     <Card
                       className="overflow-hidden border-border/40 hover:border-primary/60 cursor-pointer transition-all duration-300 bg-card/50 backdrop-blur-sm hover:shadow-md hover:shadow-primary/5"
                       onClick={() => handleVendorClick(vendor)}
@@ -876,7 +841,7 @@ export default function VendorPage() {
                       <CardFooter className="pt-2 text-xs text-muted-foreground border-t border-border/30 mt-2 flex justify-between">
                         <div className="flex items-center">
                           <Calendar className="w-3 h-3 mr-1" />
-                          Added {vendor.created_at.toLocaleDateString()}
+                          Added {new Date(vendor.created_at).toLocaleDateString()}
                         </div>
                         <div className="flex items-center text-primary/70 font-medium">
                           View Details

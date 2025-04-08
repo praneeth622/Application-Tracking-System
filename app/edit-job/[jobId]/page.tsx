@@ -4,8 +4,6 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { doc, getDoc, updateDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
 import { useAuth } from "@/context/auth-context"
 import { ArrowLeft, Briefcase, Clock, Building, FileText, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/components/ui/use-toast"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import apiClient from "@/lib/api-client"
 
 export default function EditJobPage() {
   const params = useParams()
@@ -64,10 +63,11 @@ export default function EditJobPage() {
 
       try {
         setIsLoading(true)
-        const jobRef = doc(db, "jobs", jobId, "data", "details")
-        const jobSnap = await getDoc(jobRef)
+        
+        // Fetch job using API client
+        const jobData = await apiClient.jobs.getById(jobId);
 
-        if (!jobSnap.exists()) {
+        if (!jobData) {
           toast({
             title: "Error",
             description: "Job not found",
@@ -77,10 +77,8 @@ export default function EditJobPage() {
           return
         }
 
-        const data = jobSnap.data()
-
         // Check if the current user is the creator
-        if (data.metadata?.created_by_id !== user.uid) {
+        if (jobData.metadata?.created_by_id !== user.uid) {
           toast({
             title: "Access Denied",
             description: "You don't have permission to edit this job",
@@ -90,27 +88,27 @@ export default function EditJobPage() {
           return
         }
 
-        setJobData(data)
+        setJobData(jobData)
 
         // Format the data for the form
         setFormData({
-          title: data.title || "",
-          company: data.company || "",
-          location: data.location || "",
-          description: data.description || "",
-          employment_type: data.employment_type || "",
-          experience_required: data.experience_required || "",
-          salary_range: data.salary_range || "",
-          status: data.status || "active",
-          requirements: data.requirements ? data.requirements.join("\n") : "",
-          benefits: data.benefits ? data.benefits.join("\n") : "",
-          skills_required: data.skills_required ? data.skills_required.join(", ") : "",
-          nice_to_have_skills: data.nice_to_have_skills ? data.nice_to_have_skills.join(", ") : "",
-          working_hours: data.working_hours || "",
-          mode_of_work: data.mode_of_work || "",
-          deadline: data.deadline || "",
-          key_responsibilities: data.key_responsibilities ? data.key_responsibilities.join("\n") : "",
-          about_company: data.about_company || "",
+          title: jobData.title || "",
+          company: jobData.company || "",
+          location: jobData.location || "",
+          description: jobData.description || "",
+          employment_type: jobData.employment_type || "",
+          experience_required: jobData.experience_required || "",
+          salary_range: jobData.salary_range || "",
+          status: jobData.status || "active",
+          requirements: jobData.requirements ? jobData.requirements.join("\n") : "",
+          benefits: jobData.benefits ? jobData.benefits.join("\n") : "",
+          skills_required: jobData.skills_required ? jobData.skills_required.join(", ") : "",
+          nice_to_have_skills: jobData.nice_to_have_skills ? jobData.nice_to_have_skills.join(", ") : "",
+          working_hours: jobData.working_hours || "",
+          mode_of_work: jobData.mode_of_work || "",
+          deadline: jobData.deadline || "",
+          key_responsibilities: jobData.key_responsibilities ? jobData.key_responsibilities.join("\n") : "",
+          about_company: jobData.about_company || "",
         })
       } catch (error) {
         console.error("Error fetching job details:", error)
@@ -187,9 +185,8 @@ export default function EditJobPage() {
         },
       }
 
-      // Update the job in Firestore
-      const jobRef = doc(db, "jobs", jobId, "data", "details")
-      await updateDoc(jobRef, processedData)
+      // Update the job using API client
+      await apiClient.jobs.update(jobId, processedData);
 
       toast({
         title: "Success",

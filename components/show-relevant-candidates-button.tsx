@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { Users } from "lucide-react"
 import { toast } from "sonner"
+import apiClient from "@/lib/api-client"
 
 interface ShowRelevantCandidatesButtonProps {
   jobId: string
@@ -17,14 +18,15 @@ export function ShowRelevantCandidatesButton({ jobId }: ShowRelevantCandidatesBu
   const handleClick = async () => {
     setIsChecking(true)
     try {
-      // Check if we have stored relevant profiles
-
+      // Check if we have candidates via the API
+      const candidates = await apiClient.jobs.getCandidates(jobId);
+      
       // Navigate to candidates page
       router.push(`/jobs/${jobId}/candidates`)
 
     } catch (error) {
-      console.error("Error checking relevant profiles:", error)
-      toast.error("Failed to check relevant profiles")
+      console.error("Error checking job candidates:", error)
+      toast.error("Failed to check candidates")
     } finally {
       setIsChecking(false)
     }
