@@ -44,6 +44,32 @@ interface Resume {
   }
 }
 
+// Add these interfaces at the top of the file, after the existing Resume interface
+interface ApiResumeResponse {
+  filename: string;
+  filelink: string;
+  uploaded_at: string;
+  analysis?: {
+    name?: string;
+    education_details?: Array<{
+      institute: string;
+      degree: string;
+      major: string;
+      location: string;
+      dates: string;
+    }>;
+    work_experience_details?: Array<{
+      company: string;
+      title: string;
+      location: string;
+      dates: string;
+      responsibilities: string[];
+    }>;
+    key_skills?: string[];
+    profile_summary?: string;
+  };
+}
+
 export default function KeywordMatcherPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
@@ -92,7 +118,7 @@ export default function KeywordMatcherPage() {
 
         if (userResumes && Array.isArray(userResumes)) {
           // Process each resume to ensure the required structure
-          const validResumes = userResumes.map((resume: any) => {
+          const validResumes = userResumes.map((resume: ApiResumeResponse) => {
             // Transform API response to match the expected Resume interface
             const transformedResume: Resume = {
               filename: resume.filename,

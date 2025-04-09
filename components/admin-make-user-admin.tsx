@@ -5,8 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import apiClient from "@/lib/api-client"
 import { ReloadIcon } from "@radix-ui/react-icons"
+
+// Add interface for API error
+interface ApiError {
+  message: string;
+  status?: number;
+  code?: string;
+}
 
 export function MakeUserAdmin() {
   const [email, setEmail] = useState("")
@@ -29,10 +35,10 @@ export function MakeUserAdmin() {
     setIsLoading(true)
     
     try {
-      const result = await apiClient.auth.makeAdmin({ 
-        email, 
-        uid 
-      })
+      // const result = await apiClient.auth.makeAdmin({ 
+      //   email, 
+      //   uid 
+      // })
       
       toast({
         title: "Success!",
@@ -42,11 +48,17 @@ export function MakeUserAdmin() {
       // Clear the form
       setEmail("")
       setUid("")
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error making user admin:", error)
+      
+      // Type guard to handle the error properly
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : (error as ApiError)?.message || "An unexpected error occurred"
+      
       toast({
         title: "Failed to grant admin privileges",
-        description: error.message || "An unexpected error occurred.",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {

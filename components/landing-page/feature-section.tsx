@@ -3,10 +3,8 @@
 import { motion } from "framer-motion"
 import { useInView } from "react-intersection-observer"
 import { Check } from "lucide-react"
-import { useTheme } from "next-themes"
-
+import Image from "next/image"
 export function FeatureSection() {
-  const { theme } = useTheme()
 
   const [ref1, inView1] = useInView({
     triggerOnce: false,
@@ -22,7 +20,7 @@ export function FeatureSection() {
     triggerOnce: false,
     threshold: 0.1,
   })
-
+ 
   const [ref4, inView4] = useInView({
     triggerOnce: false,
     threshold: 0.1,
@@ -42,15 +40,15 @@ export function FeatureSection() {
     },
   }
 
-  const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.2,
-      },
-    },
-  }
+  // const staggerContainer = {
+  //   hidden: { opacity: 0 },
+  //   visible: {
+  //     opacity: 1,
+  //     transition: {
+  //       staggerChildren: 0.2,
+  //     },
+  //   },
+  // }
 
   return (
     <section id="features" className="py-24 bg-white dark:bg-gray-900 relative overflow-hidden">
@@ -300,10 +298,10 @@ export function FeatureSection() {
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
               Leverage Your
               <br />
-              Team's Network
+              Team&apos;s Network
             </h3>
             <p className="text-gray-600 dark:text-gray-300 mb-6">
-              Uncover hidden opportunities by analyzing your team's professional connections, offering insights to
+              Uncover hidden opportunities by analyzing your team&apos;s professional connections, offering insights to
               engage candidates effectively.
             </p>
 
@@ -314,7 +312,7 @@ export function FeatureSection() {
 
               <div className="flex items-center space-x-3">
                 <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
-                  <img src="/placeholder.svg?height=40&width=40" alt="Profile" className="h-full w-full object-cover" />
+                  <Image src="/placeholder.svg" alt="Profile" className="h-full w-full object-cover" width={40} height={40} />
                 </div>
                 <div>
                   <div className="text-sm font-medium text-gray-900 dark:text-white">Alex Chen • Product Manager</div>

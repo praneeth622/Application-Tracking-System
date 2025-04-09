@@ -105,11 +105,12 @@ export default function AllResumesPage() {
               transition={{ delay: index * 0.1 }}
             >
               <RecentFileCard
-                fileName={resume.filename}
+                filename={resume.filename}
                 fileSize="N/A"
-                uploadDate={formatDate(resume.uploadedAt)}
-                score={resume.analysis?.score || 0}
-                fileUrl={resume.filelink}
+                date={formatDate(resume.uploadedAt)}
+                id={resume.filelink}
+                fileType={resume.filename.toLowerCase().endsWith('.pdf') ? 'pdf' : 
+                         resume.filename.toLowerCase().endsWith('.docx') ? 'docx' : 'doc'}
               />
             </motion.div>
           ))}

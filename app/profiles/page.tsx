@@ -51,6 +51,17 @@ interface Profile {
   companyFeedback?: string[];
 }
 
+interface ResumeApiResponse {
+  _id: string;
+  filename: string;
+  filelink: string;
+  uploaded_at?: string;
+  created_at?: string;
+  analysis: Analysis;
+  aiAnalysis?: string;
+  companyFeedback?: string[];
+}
+
 export default function ProfilesPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
@@ -69,15 +80,18 @@ export default function ProfilesPage() {
       console.log('Fetching profiles for user:', user.uid);
       try {
         // Use the API client to get resumes
-        const resumes = await apiClient.resumes.getUserResumes(user.uid);
+        const response = await apiClient.resumes.getUserResumes(user.uid);
+        const resumes = response as ResumeApiResponse[];
         
         // Transform MongoDB documents to match our UI needs
-        const transformedProfiles = resumes.map((resume: any) => ({
+        const transformedProfiles = resumes.map((resume: ResumeApiResponse) => ({
           _id: resume._id,
           filename: resume.filename,
           filelink: resume.filelink,
-          uploaded_at: resume.uploaded_at || resume.created_at,
+          uploaded_at: resume.uploaded_at || resume.created_at || new Date().toISOString(),
           analysis: resume.analysis,
+          aiAnalysis: resume.aiAnalysis,
+          companyFeedback: resume.companyFeedback
         }));
         
         setProfiles(transformedProfiles);
@@ -151,24 +165,24 @@ export default function ProfilesPage() {
   }, [searchQuery, profiles])
 
   // Add a delete resume function
-  const handleDeleteResume = async (id: string) => {
-    try {
-      await apiClient.resumes.deleteResume(id);
-      // Update profiles list after deletion
-      setProfiles(profiles.filter(profile => profile._id !== id));
-      toast({
-        title: "Success",
-        description: "Resume deleted successfully",
-      })
-    } catch (error) {
-      console.error("Error deleting resume:", error);
-      toast({
-        title: "Error",
-        description: "Failed to delete resume",
-        variant: "destructive",
-      })
-    }
-  }
+  // const handleDeleteResume = async (id: string) => {
+  //   try {
+  //     await apiClient.resumes.deleteResume(id);
+  //     // Update profiles list after deletion
+  //     setProfiles(profiles.filter(profile => profile._id !== id));
+  //     toast({
+  //       title: "Success",
+  //       description: "Resume deleted successfully",
+  //     })
+  //   } catch (error) {
+  //     console.error("Error deleting resume:", error);
+  //     toast({
+  //       title: "Error",
+  //       description: "Failed to delete resume",
+  //       variant: "destructive",
+  //     })
+  //   }
+  // }
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">

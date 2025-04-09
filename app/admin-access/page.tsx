@@ -1,85 +1,13 @@
 "use client"
 
-import { useState } from "react"
 import { useAuth } from "@/context/auth-context"
-import { toast } from "sonner"
 import { Shield, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 export default function AdminAccessPage() {
-  const { user, userProfile, isAdmin, refreshUserProfile } = useAuth()
-  const [isPromoting, setIsPromoting] = useState(false)
-  const [showDebugInfo, setShowDebugInfo] = useState(false)
+  const { isAdmin } = useAuth()
 
-  const makeAdmin = async () => {
-    if (!user) {
-      toast.error("No user logged in")
-      return
-    }
-
-    setIsPromoting(true)
-
-    try {
-      // Create direct user object
-      const userData = {
-        uid: user.uid,
-        email: user.email || '',
-        name: user.displayName || user.email?.split('@')[0] || 'User',
-      };
-      
-      // First try to create/update the user through the create-from-auth endpoint
-      try {
-        const createResult = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api'}/auth/create-from-auth`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(userData)
-        });
-        
-        if (!createResult.ok) {
-          console.warn("User creation may have failed, continuing anyway");
-        }
-      } catch (createError) {
-        console.warn("Error during user creation, but continuing:", createError);
-      }
-
-      // Then try to make the user admin
-      const result = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api'}/auth/make-admin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          uid: user.uid,
-          email: user.email
-        })
-      })
-
-      let responseData;
-      try {
-        responseData = await result.json();
-      } catch (e) {
-        responseData = { error: 'Failed to parse response' };
-      }
-
-      if (result.ok) {
-        toast.success("Admin role granted!")
-        
-        // Wait a moment before refreshing the page
-        setTimeout(() => {
-          toast.success("Reloading page to apply changes...");
-          window.location.reload();
-        }, 1500);
-      } else {
-        console.error("Failed to grant admin role:", responseData);
-        toast.error(`Failed to grant admin role: ${responseData.error || result.statusText}`)
-      }
-    } catch (error) {
-      console.error("Error making user admin:", error)
-      toast.error("Error promoting user to admin role")
-    } finally {
-      setIsPromoting(false)
-    }
-  }
+  
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">

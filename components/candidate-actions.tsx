@@ -10,7 +10,6 @@ import {
 import { Calendar as CalendarIcon, DollarSign } from "lucide-react"
 import { toast } from 'sonner'
 import type { Candidate, CandidateStatus } from '@/app/jobs/[jobId]/candidates/page'
-import { useAuth } from "@/context/auth-context"
 import apiClient from "@/lib/api-client"
 
 export function CandidateActions({ 
@@ -22,7 +21,6 @@ export function CandidateActions({
   jobId: string
   onUpdate: () => void
 }) {
-  const { user } = useAuth()
   const [showRateInput, setShowRateInput] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
   const [rate, setRate] = useState(candidate.tracking?.rateConfirmed || '')

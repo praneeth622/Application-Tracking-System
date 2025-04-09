@@ -54,7 +54,7 @@ export default function VendorManagement() {
     try {
       setIsLoading(true)
       const data = await apiClient.vendors.getAll()
-      setVendors(data)
+      setVendors(data as VendorData[])
     } catch (error) {
       console.error("Error fetching vendors:", error)
       toast.error("Failed to load vendors")

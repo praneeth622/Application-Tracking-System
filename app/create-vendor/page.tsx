@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import apiClient from "@/lib/api-client"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -46,6 +46,13 @@ export default function CreateVendorPage() {
     country: "",
     status: "active"
   })
+
+  const handleFileButtonClick = () => {
+    const fileUploadElement = document.getElementById("fileInput") as HTMLInputElement;
+    if (fileUploadElement) {
+      fileUploadElement.click();
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -169,7 +176,10 @@ export default function CreateVendorPage() {
                     </div>
 
                     <div className="flex justify-end">
-                      <Button type="button" onClick={() => document.querySelector('[data-value="contact"]')?.click()}>
+                      <Button type="button" onClick={() => {
+                        handleFileButtonClick();
+                        (document.querySelector('[data-value="contact"]') as HTMLElement)?.click();
+                      }}>
                         Next: Contact Details
                       </Button>
                     </div>
@@ -223,7 +233,9 @@ export default function CreateVendorPage() {
                     </div>
 
                     <div className="flex justify-between">
-                      <Button type="button" variant="outline" onClick={() => document.querySelector('[data-value="basic"]')?.click()}>
+                      <Button type="button" variant="outline" onClick={() => {
+                        (document.querySelector('[data-value="basic"]') as HTMLElement)?.click();
+                      }}>
                         Back: Basic Information
                       </Button>
                       <Button type="submit" disabled={isSubmitting} className="bg-primary">

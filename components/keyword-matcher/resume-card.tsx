@@ -29,23 +29,24 @@ interface ResumeAnalysis {
   experience_years?: number
 }
 
+interface Resume {
+  filename: string
+  filelink: string
+  uploadedAt: Date
+  analysis: ResumeAnalysis
+}
+
 interface ResumeCardProps {
-  resume: {
-    filename: string
-    filelink: string
-    uploadedAt: Date
-    analysis: ResumeAnalysis
-  }
+  resume: Resume
   index: number
   selectedKeywords: string[]
-  calculateMatchScore: (resume: any) => number
-  onViewDetails: (resume: any) => void
+  calculateMatchScore: (resume: Resume) => number
+  onViewDetails: (resume: Resume) => void
   onDownload: (fileUrl: string, filename: string) => void
 }
 
 export function ResumeCard({
   resume,
-  index,
   selectedKeywords,
   calculateMatchScore,
   onViewDetails,

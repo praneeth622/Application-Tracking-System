@@ -39,8 +39,22 @@ const createHeaders = async (additionalHeaders: Record<string, string> = {}, ski
   return headers;
 };
 
+// Define suitable types to replace 'any'
+interface ApiError extends Error {
+  status?: number;
+  statusText?: string;
+  data?: unknown;
+}
+
+interface ResumeAnalysis {
+  skills?: string[];
+  experience?: Record<string, unknown>;
+  education?: Record<string, unknown>;
+  // Add other analysis fields as needed
+}
+
 // Generate a request key for deduplication
-const getRequestKey = (url: string, method: string, body: any): string => {
+const getRequestKey = (url: string, method: string, body: unknown): string => {
   return `${method}:${url}:${JSON.stringify(body || {})}`;
 };
 
@@ -48,7 +62,7 @@ const getRequestKey = (url: string, method: string, body: any): string => {
 interface FetchParams {
   url: string;
   method?: string;
-  body?: any;
+  body?: unknown;
   headers?: Record<string, string>;
   skipAuth?: boolean;
 }
@@ -66,7 +80,7 @@ interface ResumeData {
   filename: string;
   filelink: string;
   fileHash: string;
-  analysis: any;
+  analysis: ResumeAnalysis;
   vendor_id?: string;
   vendor_name?: string;
   uploaded_at?: Date;
@@ -125,7 +139,7 @@ export const fetcher = async ({
   body = null, 
   headers = {},
   skipAuth = false
-}: FetchParams): Promise<any> => {
+}: FetchParams): Promise<unknown> => {
   // Normalize the URL to avoid duplicate slashes
   const normalizedUrl = url.startsWith('/') ? url : `/${url}`;
   const apiUrl = `${API_BASE_URL}${normalizedUrl}`;
@@ -162,14 +176,15 @@ export const fetcher = async ({
           
           try {
             errorData = JSON.parse(errorText);
-          } catch (e) {
+          } catch {
             errorData = { message: errorText };
+            console.log("Failed to parse error response as JSON:", errorText);
           }
           
-          const error = new Error(`HTTP error! status: ${response.status}`);
-          (error as any).status = response.status;
-          (error as any).statusText = response.statusText;
-          (error as any).data = errorData;
+          const error = new Error(`HTTP error! status: ${response.status}`) as ApiError;
+          error.status = response.status;
+          error.statusText = response.statusText;
+          error.data = errorData;
           
           console.error(`API Error (${response.status}):`, errorData);
           throw error;
@@ -205,7 +220,7 @@ const apiClient = {
         const response = await fetcher({ url: '/auth/me' });
         return response;
       } catch (error) {
-        if ((error as any).status === 404) {
+        if ((error as ApiError).status === 404) {
           throw new Error('User not found in database');
         }
         throw error;
@@ -257,7 +272,7 @@ const apiClient = {
         return data;
       } catch (error) {
         // If access is denied due to not being admin, log it clearly
-        if ((error as any).status === 403) {
+        if ((error as ApiError).status === 403) {
           console.log('Access to all resumes denied: Admin privileges required');
           return []; // Return empty array instead of throwing
         }
@@ -309,7 +324,7 @@ const apiClient = {
     }),
     
     // Save candidates for a job
-    saveCandidates: (jobId: string, candidates: any[]) => fetcher({
+    saveCandidates: (jobId: string, candidates: Record<string, unknown>[]) => fetcher({
       url: `/jobs/${jobId}/candidates`,
       method: 'PUT',
       body: { candidates }
