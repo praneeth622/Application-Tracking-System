@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChevronRight, Loader2, Users, Server, FileText, Building, Briefcase, Shield, RefreshCw } from "lucide-react"
@@ -45,58 +45,40 @@ export default function AdminPage() {
   const initialCheckRef = useRef(false);
 
   // Define all hooks first, before any conditional returns
-  const fetchStats = useCallback(async () => {
+  const fetchStats = async () => {
     if (!userProfile || userProfile.role !== 'admin' || isLoadingStats) {
       return;
     }
     
     setIsLoadingStats(true);
-    setApiStatus('loading');
     
     try {
-      // Use separate variables for data to avoid state issues
+      // Fetch users first
       let usersData = [];
-      let resumeCount = 0;
-      let vendorCount = 0;
-      let jobCount = 0;
-      
-      // Fetch users
       try {
         const response = await apiClient.auth.getAllUsers();
-        usersData = Array.isArray(response) ? response.map(user => ({
-          ...user,
-          uid: user.id || user.uid || '' // Ensure uid is present as a non-empty string
-        })) : [];
+        usersData = Array.isArray(response) ? response : [];
       } catch (error) {
-        console.error("Error fetching users:", error);
+        console.error("Error fetching users for stats:", error);
+        usersData = [];
       }
       
-      // Fetch resumes - handle gracefully if not admin
-      try {
-        const resumesData = await apiClient.resumes.getAllResumes();
-        resumeCount = Array.isArray(resumesData) ? resumesData.length : 0;
-      } catch (error) {
-        console.error("Error fetching resumes:", error);
-        // If access denied, show 0 but don't break the dashboard
-      }
+      // Other stats fetching logic...
+      const [resumesData, vendorsData, jobsData] = await Promise.allSettled([
+        apiClient.resumes.getAllResumes(),
+        apiClient.vendors.getAll(),
+        apiClient.jobs.getAll()
+      ]);
+
+      const resumeCount = resumesData.status === 'fulfilled' ? 
+        (Array.isArray(resumesData.value) ? resumesData.value.length : 0) : 0;
       
-      // Fetch vendors
-      try {
-        const vendorsData = await apiClient.vendors.getAll();
-        vendorCount = Array.isArray(vendorsData) ? vendorsData.length : 0;
-      } catch (error) {
-        console.error("Error fetching vendors:", error);
-      }
+      const vendorCount = vendorsData.status === 'fulfilled' ? 
+        (Array.isArray(vendorsData.value) ? vendorsData.value.length : 0) : 0;
       
-      // Fetch jobs
-      try {
-        const jobsData = await apiClient.jobs.getAll();
-        jobCount = Array.isArray(jobsData) ? jobsData.length : 0;
-      } catch (error) {
-        console.error("Error fetching jobs:", error);
-      }
-      
-      // Update API status and stats
+      const jobCount = jobsData.status === 'fulfilled' ? 
+        (Array.isArray(jobsData.value) ? jobsData.value.length : 0) : 0;
+
       setApiStatus('online');
       
       const newStats = [
@@ -156,64 +138,65 @@ export default function AdminPage() {
     } finally {
       setIsLoadingStats(false);
     }
-  }, [userProfile, toast, isLoadingStats]);
+  };
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = async () => {
     if (!userProfile || userProfile.role !== 'admin' || isLoadingUsers) {
       return;
     }
     
     setIsLoadingUsers(true);
     try {
-      const response = await fetch('/api/admin/users');
-      const data = await response.json() as { users: User[] };
-      // Ensure each user has a uid property that's a string
-      const usersWithUid = (data.users || []).map(user => ({
-        ...user,
-        uid: user.uid || user.id || ''
-      }));
-      setUsers(usersWithUid);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      const response = await apiClient.auth.getAllUsers();
+      // Ensure response is an array and each user has required properties
+      const formattedUsers = Array.isArray(response) ? response.map(user => ({
+        id: user.id || user._id || user.uid || '',
+        uid: user.uid || user.id || user._id || '',
+        name: user.name || '',
+        email: user.email || '',
+        role: user.role || 'user'
+      })) : [];
+      
+      setUsers(formattedUsers);
+    } catch (error) {
       console.error("Error fetching users:", error);
       toast({
         title: "Failed to load users",
-        description: errorMessage,
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
         variant: "destructive",
       });
+      // Set empty array to prevent continuous retries
+      setUsers([]);
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [userProfile, toast, isLoadingUsers]);
+  };
 
   useEffect(() => {
     if (!initialCheckRef.current && userProfile === null) {
       initialCheckRef.current = true;
-      const checkAdminStatus = async () => {
-        try {
-          await refreshUserProfile();
-        } catch (error) {
-          console.error("Error refreshing profile:", error);
-        }
-      };
-      
-      checkAdminStatus();
+      refreshUserProfile().catch(error => {
+        console.error("Error refreshing profile:", error);
+      });
     }
   }, [refreshUserProfile, userProfile]);
 
   useEffect(() => {
-    const shouldFetchData = userProfile?.role === 'admin';
-    
-    if (!shouldFetchData) {
-      return;
-    }
+    if (userProfile?.role !== 'admin') return;
 
     if (activeTab === 'dashboard' && !dataLoaded && !isLoadingStats) {
       fetchStats();
-    } else if (activeTab === 'users' && users.length === 0 && !isLoadingUsers) {
+    }
+  }, [activeTab, userProfile, dataLoaded, isLoadingStats]);
+
+  useEffect(() => {
+    if (userProfile?.role !== 'admin') return;
+
+    // Only fetch users when the tab is "users" and we don't have users yet or explicitly need to refresh
+    if (activeTab === 'users' && !isLoadingUsers && users.length === 0) {
       fetchUsers();
     }
-  }, [activeTab, userProfile, dataLoaded, users.length, fetchStats, fetchUsers, isLoadingUsers, isLoadingStats]);
+  }, [activeTab, userProfile, users.length, isLoadingUsers]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
