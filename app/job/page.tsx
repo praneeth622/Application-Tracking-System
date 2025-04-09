@@ -25,6 +25,38 @@ import { JobDetailsSheet } from "@/components/job/job-details-sheet"
 // Import types
 import type { Job } from "@/types/jobs"
 
+interface JobApiResponse {
+  _id: string;
+  title: string;
+  company: string;
+  location: string;
+  employment_type: string;
+  experience_required: string;
+  salary_range: string;
+  created_at: string;
+  description: string;
+  status: string;
+  total_applications?: number;
+  shortlisted?: number;
+  rejected?: number;
+  in_progress?: number;
+  benefits?: string[];
+  requirements?: string[];
+  skills_required?: string[];
+  working_hours: string;
+  mode_of_work: string;
+  key_responsibilities: string[];
+  nice_to_have_skills: string[];
+  about_company: string;
+  deadline: string;
+  metadata?: {
+    created_by?: string;
+    created_by_id?: string;
+    last_modified_by?: string;
+  };
+  assigned_recruiters?: string[];
+}
+
 export default function JobPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
@@ -55,39 +87,45 @@ export default function JobPage() {
         
         // Use API client to fetch jobs
         const response = await apiClient.jobs.getAll();
+        // The API returns an array of jobs directly, not a { jobs: Job[] } object
+        const jobsArray = Array.isArray(response) ? response : [];
         
         // Transform the data to match the Job type
-        const transformedJobs: Job[] = response.map((jobData: any) => ({
-          job_id: jobData._id,
-          title: jobData.title,
-          company: jobData.company,
-          location: jobData.location,
-          employment_type: jobData.employment_type,
-          experience_required: jobData.experience_required,
-          salary_range: jobData.salary_range,
-          created_at: new Date(jobData.created_at),
-          description: jobData.description,
-          status: jobData.status,
-          total_applications: jobData.total_applications || 0,
-          shortlisted: jobData.shortlisted || 0,
-          rejected: jobData.rejected || 0,
-          in_progress: jobData.in_progress || 0,
-          benefits: jobData.benefits || [],
-          requirements: jobData.requirements || [],
-          skills_required: jobData.skills_required || [],
-          working_hours: jobData.working_hours,
-          mode_of_work: jobData.mode_of_work,
-          key_responsibilities: jobData.key_responsibilities,
-          nice_to_have_skills: jobData.nice_to_have_skills,
-          about_company: jobData.about_company,
-          deadline: jobData.deadline,
-          metadata: {
-            created_by: jobData.metadata?.created_by || "",
-            created_by_id: jobData.metadata?.created_by_id || "",
-            last_modified_by: jobData.metadata?.last_modified_by || "",
-          },
-          assigned_recruiters: jobData.assigned_recruiters || [],
-        }));
+        const transformedJobs: Job[] = jobsArray.map((job) => {
+          // Explicitly cast the job to JobApiResponse to access _id property
+          const jobData = job as unknown as JobApiResponse;
+          return {
+            job_id: jobData._id,
+            title: jobData.title,
+            company: jobData.company,
+            location: jobData.location,
+            employment_type: jobData.employment_type,
+            experience_required: jobData.experience_required,
+            salary_range: jobData.salary_range,
+            created_at: new Date(jobData.created_at),
+            description: jobData.description,
+            status: jobData.status,
+            total_applications: jobData.total_applications || 0,
+            shortlisted: jobData.shortlisted || 0,
+            rejected: jobData.rejected || 0,
+            in_progress: jobData.in_progress || 0,
+            benefits: jobData.benefits || [],
+            requirements: jobData.requirements || [],
+            skills_required: jobData.skills_required || [],
+            working_hours: jobData.working_hours,
+            mode_of_work: jobData.mode_of_work,
+            key_responsibilities: jobData.key_responsibilities,
+            nice_to_have_skills: jobData.nice_to_have_skills,
+            about_company: jobData.about_company,
+            deadline: jobData.deadline,
+            metadata: {
+              created_by: jobData.metadata?.created_by || "",
+              created_by_id: jobData.metadata?.created_by_id || "",
+              last_modified_by: jobData.metadata?.last_modified_by || "",
+            },
+            assigned_recruiters: jobData.assigned_recruiters || [],
+          }
+        });
 
         setJobs(transformedJobs)
         setFilteredJobs(transformedJobs)

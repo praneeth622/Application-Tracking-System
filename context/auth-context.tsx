@@ -6,6 +6,14 @@ import { auth } from "@/FirebaseConfig"
 import type { UserProfile } from "@/types/user"
 import apiClient from "@/lib/api-client"
 
+// Define an interface for API responses to fix type issues
+interface UserProfileResponse {
+  uid: string;
+  email: string;
+  role: string;
+  [key: string]: any; // Allow other properties
+}
+
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
@@ -40,7 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("Starting user profile refresh for:", user.uid);
       
       // First try to get the current user profile
-      const userData = await apiClient.auth.getCurrentUser();
+      const response = await apiClient.auth.getCurrentUser();
+      const userData = response as UserProfile;
       setUserProfile(userData);
       const hasAdminRole = userData?.role === 'admin';
       setIsAdmin(hasAdminRole);
@@ -71,12 +80,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
           
           // Create the user via API without requiring authentication
-          const result = await apiClient.auth.createFromAuth(userData);
+          const response = await apiClient.auth.createFromAuth(userData);
+          const result = response as UserProfileResponse;
           console.log("User record created:", result);
           
-          if (result.user) {
-            setUserProfile(result.user);
-            const hasAdminRole = result.user.role === 'admin';
+          if (result) {
+            setUserProfile(result as UserProfile);
+            const hasAdminRole = result.role === 'admin';
             setIsAdmin(hasAdminRole);
             console.log("Created user admin status:", hasAdminRole);
           }
@@ -100,12 +110,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: firebaseUser.displayName || firebaseUser.email.split('@')[0] || 'User',
       }
       
-      const result = await apiClient.auth.createFromAuth(userData)
-      console.log("User record created from Firebase auth:", result)
-      return true
+      const response = await apiClient.auth.createFromAuth(userData);
+      const result = response as UserProfileResponse;
+      console.log("User record created from Firebase auth:", result);
+      return true;
     } catch (error) {
-      console.error("Error creating user record:", error)
-      return false
+      console.error("Error creating user record:", error);
+      return false;
     }
   }
 
@@ -127,9 +138,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         try {
           // Try to get the user profile
-          const userData = await apiClient.auth.getCurrentUser();
+          const response = await apiClient.auth.getCurrentUser();
+          const userData = response as UserProfileResponse;
           if (isMounted) {
-            setUserProfile(userData);
+            setUserProfile(userData as UserProfile);
             setIsAdmin(userData?.role === 'admin');
             initialLoadAttempted.current = true;
             setLoading(false);
@@ -147,9 +159,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (!isMounted) return;
                 
                 try {
-                  const newUserData = await apiClient.auth.getCurrentUser();
+                  const response = await apiClient.auth.getCurrentUser();
+                  const newUserData = response as UserProfileResponse;
                   if (isMounted) {
-                    setUserProfile(newUserData);
+                    setUserProfile(newUserData as UserProfile);
                     setIsAdmin(newUserData?.role === 'admin');
                   }
                 } catch (retryError) {

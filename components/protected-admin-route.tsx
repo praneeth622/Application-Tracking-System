@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { MakeUserAdmin } from "@/components/admin-make-user-admin";
 
 export function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, isAdmin, loading, refreshUserProfile, userProfile } = useAuth();
+  const { user, loading, refreshUserProfile, userProfile } = useAuth();
   const [isChecking, setIsChecking] = useState(true);
   const router = useRouter();
 

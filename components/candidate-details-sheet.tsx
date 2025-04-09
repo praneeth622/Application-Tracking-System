@@ -101,7 +101,10 @@ export function CandidateDetailsSheet({
       console.log(`Fetching candidate updates for ${initialCandidate.filename}`);
       
       // Get all candidates for the job
-      const candidates = await apiClient.jobs.getCandidates(jobId);
+      const response = await apiClient.jobs.getCandidates(jobId);
+      const candidates = response instanceof Response 
+        ? await response.json() as Candidate[]
+        : response as Candidate[];
       
       // Find the specific candidate we're looking at
       const updatedCandidate = candidates.find((c: Candidate) => c.filename === initialCandidate.filename);
@@ -163,7 +166,7 @@ export function CandidateDetailsSheet({
         candidate.filename, // Using filename as the candidateId
         newStatus,
         additionalData
-      );
+      ) as { tracking?: Candidate['tracking'] };
 
       console.log('Status update result:', JSON.stringify(result, null, 2));
       console.log('Tracking data returned by API:', result?.tracking ? JSON.stringify(result.tracking, null, 2) : 'No tracking data');
@@ -207,6 +210,7 @@ export function CandidateDetailsSheet({
     // TODO: Implement resume download using API client
     // Example: apiClient.resumes.download(candidate.filename)
   }
+
 
   if (!candidate) return null
 
@@ -488,7 +492,7 @@ export function CandidateDetailsSheet({
               <Separator />
 
               {/* Tracking Information */}
-              {candidate.tracking && (
+              {candidate?.tracking && (
                 <div className="space-y-2">
                   <h3 className="font-semibold text-lg">Status Information</h3>
                   <div className="space-y-3">
@@ -522,10 +526,12 @@ export function CandidateDetailsSheet({
                       </div>
                     )}
 
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Clock className="w-4 h-4" />
-                      Last updated: {format(new Date(candidate.tracking.lastUpdated), "PPp")}
-                    </div>
+                    {candidate?.tracking?.lastUpdated && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="w-4 h-4" />
+                        Last updated: {format(new Date(candidate.tracking.lastUpdated), "PPp")}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

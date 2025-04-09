@@ -68,7 +68,7 @@ export function ResumeDetailsDialog({
           <DialogTitle className="text-xl font-bold text-violet-900 dark:text-violet-100">
             {resume.analysis.name || "Candidate Resume"}
           </DialogTitle>
-          <DialogDescription>Detailed information about this candidate's resume</DialogDescription>
+          <DialogDescription>Detailed information about this candidate&apos;s resume</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">

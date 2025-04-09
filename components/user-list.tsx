@@ -39,7 +39,7 @@ export function UserList() {
   const fetchUsers = async () => {
     try {
       const fetchedUsers = await apiClient.auth.getAllUsers();
-      setUsers(fetchedUsers);
+      setUsers(fetchedUsers as User[]);
     } catch (error) {
       console.error("Error fetching users:", error)
       toast.error("Failed to fetch users")

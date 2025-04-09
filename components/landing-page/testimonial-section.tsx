@@ -71,7 +71,7 @@ export function TestimonialSection() {
             transition={{ duration: 0.5, delay: 0.5 }}
             className="text-3xl md:text-5xl font-bold text-gray-900 dark:text-white mb-8 italic"
           >
-            " The Recruiter's AI Sidekick "
+            &quot; The Recruiter&apos;s AI Sidekick &quot;
           </motion.h2>
 
           <motion.div

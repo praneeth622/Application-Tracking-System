@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { Users } from "lucide-react"
 import { toast } from "sonner"
-import apiClient from "@/lib/api-client"
 
 interface ShowRelevantCandidatesButtonProps {
   jobId: string
@@ -19,7 +18,6 @@ export function ShowRelevantCandidatesButton({ jobId }: ShowRelevantCandidatesBu
     setIsChecking(true)
     try {
       // Check if we have candidates via the API
-      const candidates = await apiClient.jobs.getCandidates(jobId);
       
       // Navigate to candidates page
       router.push(`/jobs/${jobId}/candidates`)

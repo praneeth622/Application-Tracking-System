@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeft, Briefcase, MapPin, DollarSign, Clock, Calendar, CheckCircle } from "lucide-react"
+import { ArrowLeft, Briefcase, MapPin, DollarSign, Clock, Calendar,  } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAuth } from "@/context/auth-context"
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/use-toast"
 import { SkillInput } from "@/components/skill-input"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { AlertCircle } from "lucide-react"
@@ -28,12 +28,8 @@ interface JobFormData {
   experience_required: string
   salary_range: string
   description: string
-  requirements: string[]
-  benefits: string[]
   working_hours: string
   mode_of_work: string
-  key_responsibilities: string[]
-  nice_to_have_skills: string[]
   about_company: string
   deadline: string
 }
@@ -46,7 +42,11 @@ export default function CreateJobPage() {
   const [activeTab, setActiveTab] = useState("basic")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
-  const [skills, setSkills] = useState<string[]>([])
+  const [] = useState<string[]>([])
+  const [requirements, setRequirements] = useState<string[]>([])
+  const [benefits, setBenefits] = useState<string[]>([])
+  const [skillsRequired, setSkillsRequired] = useState<string[]>([])
+  const [niceToHaveSkills, setNiceToHaveSkills] = useState<string[]>([])
 
   const [formData, setFormData] = useState<JobFormData>({
     title: "",
@@ -56,12 +56,8 @@ export default function CreateJobPage() {
     experience_required: "",
     salary_range: "",
     description: "",
-    requirements: [],
-    benefits: [],
     working_hours: "",
     mode_of_work: "",
-    key_responsibilities: [],
-    nice_to_have_skills: [],
     about_company: "",
     deadline: "",
   })
@@ -82,30 +78,27 @@ export default function CreateJobPage() {
     if (!formData.deadline) errors.deadline = "Application deadline is required"
 
     // Requirements validation
-    if (formData.requirements.length === 0 || (formData.requirements.length === 1 && !formData.requirements[0])) {
+    if (requirements.length === 0) {
       errors.requirements = "At least one requirement is required"
     }
 
     // Benefits validation
-    if (formData.benefits.length === 0 || (formData.benefits.length === 1 && !formData.benefits[0])) {
+    if (benefits.length === 0) {
       errors.benefits = "At least one benefit is required"
     }
 
     // Skills validation
-    if (skills.length === 0) {
+    if (skillsRequired.length === 0) {
       errors.skills = "At least one required skill is required"
-    }
-
-    // Responsibilities validation
-    if (
-      formData.key_responsibilities.length === 0 ||
-      (formData.key_responsibilities.length === 1 && !formData.key_responsibilities[0])
-    ) {
-      errors.key_responsibilities = "At least one responsibility is required"
     }
 
     setFormErrors(errors)
     return Object.keys(errors).length === 0
+  }
+
+  const handleRequirementChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setRequirements(value ? value.split("\n") : [])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -132,7 +125,7 @@ export default function CreateJobPage() {
       ) {
         setActiveTab("requirements")
       } else if (
-        Object.keys(formErrors).some((key) => ["key_responsibilities", "working_hours", "mode_of_work"].includes(key))
+        Object.keys(formErrors).some((key) => ["working_hours", "mode_of_work"].includes(key))
       ) {
         setActiveTab("details")
       } else if (Object.keys(formErrors).some((key) => ["benefits", "about_company", "deadline"].includes(key))) {
@@ -152,27 +145,6 @@ export default function CreateJobPage() {
     try {
       if (!user) throw new Error("User not authenticated")
 
-      // Convert text areas with multiple lines to arrays
-      const requirementsArray =
-        typeof formData.requirements === "string"
-          ? formData.requirements.split("\n").filter(Boolean)
-          : formData.requirements.filter(Boolean)
-
-      const benefitsArray =
-        typeof formData.benefits === "string"
-          ? formData.benefits.split("\n").filter(Boolean)
-          : formData.benefits.filter(Boolean)
-
-      const responsibilitiesArray =
-        typeof formData.key_responsibilities === "string"
-          ? formData.key_responsibilities.split("\n").filter(Boolean)
-          : formData.key_responsibilities.filter(Boolean)
-
-      const niceToHaveArray =
-        typeof formData.nice_to_have_skills === "string"
-          ? formData.nice_to_have_skills.split("\n").filter(Boolean)
-          : formData.nice_to_have_skills.filter(Boolean)
-
       // Create job data object
       const jobData = {
         title: formData.title,
@@ -187,21 +159,20 @@ export default function CreateJobPage() {
         shortlisted: 0,
         rejected: 0,
         in_progress: 0,
-        benefits: benefitsArray,
-        requirements: requirementsArray,
-        skills_required: skills,
+        benefits,
+        requirements,
+        skills_required: skillsRequired,
+        nice_to_have_skills: niceToHaveSkills,
         working_hours: formData.working_hours,
         mode_of_work: formData.mode_of_work,
-        key_responsibilities: responsibilitiesArray,
-        nice_to_have_skills: niceToHaveArray,
         about_company: formData.about_company,
         deadline: formData.deadline,
         created_at: new Date(),
         updated_at: new Date(),
         metadata: {
-          created_by: user.email || "",
-          created_by_id: user.uid || "",
-          last_modified_by: user.email || "",
+          created_by: user?.email || "",
+          created_by_id: user?.uid || "",
+          last_modified_by: user?.email || "",
         },
       }
 
@@ -236,17 +207,6 @@ export default function CreateJobPage() {
     }
   }
 
-  const handleTextAreaChange = (field: keyof JobFormData, value: string) => {
-    const arrayValue = value.split("\n")
-    setFormData({ ...formData, [field]: arrayValue })
-    // Clear error for this field if it exists
-    if (formErrors[field]) {
-      const newErrors = { ...formErrors }
-      delete newErrors[field]
-      setFormErrors(newErrors)
-    }
-  }
-
   const getCompletionPercentage = () => {
     const totalFields = 14 // Total number of required fields
     const filledFields = [
@@ -257,12 +217,11 @@ export default function CreateJobPage() {
       formData.experience_required,
       formData.salary_range,
       formData.description,
-      formData.requirements.length > 0 && formData.requirements[0] !== "",
-      formData.benefits.length > 0 && formData.benefits[0] !== "",
+      requirements.length > 0,
+      benefits.length > 0,
       formData.working_hours,
       formData.mode_of_work,
-      formData.key_responsibilities.length > 0 && formData.key_responsibilities[0] !== "",
-      skills.length > 0,
+      skillsRequired.length > 0,
       formData.deadline,
     ].filter(Boolean).length
 
@@ -310,7 +269,6 @@ export default function CreateJobPage() {
                     <div
                       className="absolute inset-0 rounded-full border-4 border-primary"
                       style={{
-                        clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%)`,
                         clipPath: `path('M 50 0 A 50 50 0 ${getCompletionPercentage() >= 50 ? 1 : 0} 1 ${50 + 50 * Math.cos((2 * Math.PI * getCompletionPercentage()) / 100)} ${50 + 50 * Math.sin((2 * Math.PI * getCompletionPercentage()) / 100)} L 50 50 Z')`,
                       }}
                     ></div>
@@ -347,7 +305,7 @@ export default function CreateJobPage() {
                 <TabsTrigger value="details" className="relative">
                   Job Details
                   {Object.keys(formErrors).some((key) =>
-                    ["key_responsibilities", "working_hours", "mode_of_work"].includes(key),
+                    ["working_hours", "mode_of_work"].includes(key),
                   ) && <span className="absolute top-0 right-1 w-2 h-2 bg-destructive rounded-full"></span>}
                 </TabsTrigger>
                 <TabsTrigger value="additional" className="relative">
@@ -511,8 +469,8 @@ export default function CreateJobPage() {
                       </Label>
                       <Textarea
                         id="requirements"
-                        value={formData.requirements.join("\n")}
-                        onChange={(e) => handleTextAreaChange("requirements", e.target.value)}
+                        value={requirements.join("\n")}
+                        onChange={handleRequirementChange}
                         placeholder="List the job requirements, one per line"
                         className={formErrors.requirements ? "border-destructive" : ""}
                       />
@@ -523,7 +481,7 @@ export default function CreateJobPage() {
                       <Label htmlFor="skills" className={formErrors.skills ? "text-destructive" : ""}>
                         Required Skills <span className="text-destructive">*</span>
                       </Label>
-                      <SkillInput skills={skills} setSkills={setSkills} />
+                      <SkillInput skills={skillsRequired} setSkills={setSkillsRequired} />
                       {formErrors.skills && <p className="text-sm text-destructive">{formErrors.skills}</p>}
                     </div>
 
@@ -531,8 +489,8 @@ export default function CreateJobPage() {
                       <Label htmlFor="nice_to_have_skills">Nice-to-Have Skills</Label>
                       <Textarea
                         id="nice_to_have_skills"
-                        value={formData.nice_to_have_skills.join("\n")}
-                        onChange={(e) => handleTextAreaChange("nice_to_have_skills", e.target.value)}
+                        value={niceToHaveSkills.join("\n")}
+                        onChange={(e) => setNiceToHaveSkills(e.target.value.split("\n"))}
                         placeholder="List any additional skills that are nice to have, one per line"
                       />
                     </div>
@@ -547,25 +505,6 @@ export default function CreateJobPage() {
                     <CardDescription>Provide additional details about the job role</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="key_responsibilities"
-                        className={formErrors.key_responsibilities ? "text-destructive" : ""}
-                      >
-                        Key Responsibilities <span className="text-destructive">*</span>
-                      </Label>
-                      <Textarea
-                        id="key_responsibilities"
-                        value={formData.key_responsibilities.join("\n")}
-                        onChange={(e) => handleTextAreaChange("key_responsibilities", e.target.value)}
-                        placeholder="List the key responsibilities, one per line"
-                        className={formErrors.key_responsibilities ? "border-destructive" : ""}
-                      />
-                      {formErrors.key_responsibilities && (
-                        <p className="text-sm text-destructive">{formErrors.key_responsibilities}</p>
-                      )}
-                    </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="working_hours" className={formErrors.working_hours ? "text-destructive" : ""}>
                         Working Hours <span className="text-destructive">*</span>
@@ -622,8 +561,8 @@ export default function CreateJobPage() {
                       </Label>
                       <Textarea
                         id="benefits"
-                        value={formData.benefits.join("\n")}
-                        onChange={(e) => handleTextAreaChange("benefits", e.target.value)}
+                        value={benefits.join("\n")}
+                        onChange={(e) => setBenefits(e.target.value.split("\n"))}
                         placeholder="List the benefits, one per line"
                         className={formErrors.benefits ? "border-destructive" : ""}
                       />

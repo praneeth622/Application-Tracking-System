@@ -5,10 +5,10 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
-import { Upload, FileText, X, FileUp, CloudUpload, CheckCircle, AlertCircle, Sparkles, Clock, Trash2 } from "lucide-react"
+import { Upload, FileText, X, FileUp, CloudUpload, Clock, Trash2 } from "lucide-react"
 
-import { s3Client, bucketName } from "@/AWSConfig"
-import { PutObjectCommand } from "@aws-sdk/client-s3"
+// import { s3Client, bucketName } from "@/AWSConfig"
+// import { PutObjectCommand } from "@aws-sdk/client-s3"
 
 import { useAuth } from "@/context/auth-context"
 import { generateUUID } from "@/utils/generate-id"
@@ -87,14 +87,27 @@ type AnalysisResult = {
 }
 
 // Add this interface near the top of the file with other type definitions
-interface FirebaseError {
-  code: string
-  message: string
+// interface FirebaseError {
+//   code: string
+//   message: string
+//   name: string
+// }
+
+// Modify the Vendor interface to include _id instead of id
+interface Vendor {
+  _id: string
   name: string
+  address?: string
+  contact_person?: string
+  country?: string
+  email?: string
+  phone?: string
+  state?: string
+  status?: string
 }
 
-// Define Vendor interface
-interface Vendor {
+// Add this interface for the vendor API response
+interface VendorApiResponse {
   _id: string
   name: string
   address?: string
@@ -130,12 +143,12 @@ export function DragDropUpload() {
     const fetchVendors = async () => {
       setIsLoadingVendors(true)
       try {
-        // Use API client to fetch vendors
-        const vendorsList = await apiClient.vendors.getAll();
+        // Use API client to fetch vendors with proper typing
+        const vendorsList = await apiClient.vendors.getAll() as VendorApiResponse[];
         
         // Map to the format our component expects
-        const mappedVendors = vendorsList.map((vendor: any) => ({
-          id: vendor._id,
+        const mappedVendors = vendorsList.map((vendor: VendorApiResponse) => ({
+          _id: vendor._id,
           name: vendor.name,
           address: vendor.address,
           contact_person: vendor.contact_person,
@@ -194,9 +207,9 @@ export function DragDropUpload() {
         let vendorName = null
         
         if (selectedVendor && selectedVendor !== "no-vendor") {
-          const vendor = vendors.find((v) => v.id === selectedVendor)
+          const vendor = vendors.find((v) => v._id === selectedVendor)
           if (vendor) {
-            vendorId = vendor.id
+            vendorId = vendor._id
             vendorName = vendor.name
           }
         }
@@ -223,13 +236,16 @@ export function DragDropUpload() {
           title: "Resume processed successfully",
           description: `${file.name} has been analyzed and saved.`,
         })
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Error processing resume:", error)
+
+        // Type guard for ApiError
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
 
         // Update with error
         resumeToProcess.status = "error"
         resumeToProcess.progress = 100
-        resumeToProcess.errorMessage = error.message || "Unknown error occurred"
+        resumeToProcess.errorMessage = errorMessage
         
         updatedQueue[nextResumeIndex] = resumeToProcess
         setResumeQueue(updatedQueue)
@@ -238,7 +254,7 @@ export function DragDropUpload() {
         toast({
           variant: "destructive",
           title: "Error processing resume",
-          description: resumeToProcess.errorMessage,
+          description: errorMessage,
         })
       }
     }
@@ -250,72 +266,72 @@ export function DragDropUpload() {
   }, [resumeQueue, isProcessing, user, selectedVendor, vendors, toast])
 
   // Function to validate if a file is actually a resume
-  const validateResumeContent = async (file: File): Promise<{ valid: boolean; message?: string }> => {
-    try {
-      // Check file extension first
-      const extension = file.name.split(".").pop()?.toLowerCase()
-      if (!["pdf", "docx", "doc"].includes(extension || "")) {
-        return { valid: false, message: "Only PDF, DOCX, and DOC files are supported" }
-      }
+  // const validateResumeContent = async (file: File): Promise<{ valid: boolean; message?: string }> => {
+  //   try {
+  //     // Check file extension first
+  //     const extension = file.name.split(".").pop()?.toLowerCase()
+  //     if (!["pdf", "docx", "doc"].includes(extension || "")) {
+  //       return { valid: false, message: "Only PDF, DOCX, and DOC files are supported" }
+  //     }
 
-      // For PDF files, we can check the header
-      if (extension === "pdf") {
-        const buffer = await file.arrayBuffer()
-        const bytes = new Uint8Array(buffer.slice(0, 5))
-        const header = Array.from(bytes)
-          .map((byte) => byte.toString(16))
-          .join("")
+  //     // For PDF files, we can check the header
+  //     if (extension === "pdf") {
+  //       const buffer = await file.arrayBuffer()
+  //       const bytes = new Uint8Array(buffer.slice(0, 5))
+  //       const header = Array.from(bytes)
+  //         .map((byte) => byte.toString(16))
+  //         .join("")
 
-        // PDF files start with %PDF- (hex: 25504446)
-        if (!header.startsWith("255044")) {
-          return { valid: false, message: "Invalid PDF file format" }
-        }
-      }
+  //       // PDF files start with %PDF- (hex: 25504446)
+  //       if (!header.startsWith("255044")) {
+  //         return { valid: false, message: "Invalid PDF file format" }
+  //       }
+  //     }
 
-      // For DOCX files, check for the ZIP signature
-      if (extension === "docx") {
-        const buffer = await file.arrayBuffer()
-        const bytes = new Uint8Array(buffer.slice(0, 4))
-        const header = Array.from(bytes)
-          .map((byte) => byte.toString(16))
-          .join("")
+  //     // For DOCX files, check for the ZIP signature
+  //     if (extension === "docx") {
+  //       const buffer = await file.arrayBuffer()
+  //       const bytes = new Uint8Array(buffer.slice(0, 4))
+  //       const header = Array.from(bytes)
+  //         .map((byte) => byte.toString(16))
+  //         .join("")
 
-        // DOCX files are ZIP files and start with PK (hex: 504B)
-        if (!header.startsWith("504b")) {
-          return { valid: false, message: "Invalid DOCX file format" }
-        }
-      }
+  //       // DOCX files are ZIP files and start with PK (hex: 504B)
+  //       if (!header.startsWith("504b")) {
+  //         return { valid: false, message: "Invalid DOCX file format" }
+  //       }
+  //     }
 
-      // For DOC files, check for the DOC signature
-      if (extension === "doc") {
-        const buffer = await file.arrayBuffer()
-        const bytes = new Uint8Array(buffer.slice(0, 8))
-        const header = Array.from(bytes)
-          .map((byte) => byte.toString(16))
-          .join("")
+  //     // For DOC files, check for the DOC signature
+  //     if (extension === "doc") {
+  //       const buffer = await file.arrayBuffer()
+  //       const bytes = new Uint8Array(buffer.slice(0, 8))
+  //       const header = Array.from(bytes)
+  //         .map((byte) => byte.toString(16))
+  //         .join("")
 
-        // DOC files start with D0CF11E0 (hex: D0CF11E0)
-        if (!header.includes("d0cf11e0")) {
-          return { valid: false, message: "Invalid DOC file format" }
-        }
-      }
+  //       // DOC files start with D0CF11E0 (hex: D0CF11E0)
+  //       if (!header.includes("d0cf11e0")) {
+  //         return { valid: false, message: "Invalid DOC file format" }
+  //       }
+  //     }
 
-      // Check file size (resumes are typically under 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        return { valid: false, message: "File is too large. Resumes should be under 10MB" }
-      }
+  //     // Check file size (resumes are typically under 10MB)
+  //     if (file.size > 10 * 1024 * 1024) {
+  //       return { valid: false, message: "File is too large. Resumes should be under 10MB" }
+  //     }
 
-      // Check if file is empty
-      if (file.size === 0) {
-        return { valid: false, message: "File is empty" }
-      }
+  //     // Check if file is empty
+  //     if (file.size === 0) {
+  //       return { valid: false, message: "File is empty" }
+  //     }
 
-      return { valid: true }
-    } catch (error) {
-      console.error("Error validating resume:", error)
-      return { valid: false, message: "Error validating file" }
-    }
-  }
+  //     return { valid: true }
+  //   } catch (error) {
+  //     console.error("Error validating resume:", error)
+  //     return { valid: false, message: "Error validating file" }
+  //   }
+  // }
 
   // Event handlers for drag and drop
   const handleDragEnter = (e: React.DragEvent) => {
@@ -378,7 +394,7 @@ export function DragDropUpload() {
       progress: 0,
       uploadedAt: new Date(),
       vendorId: selectedVendor,
-      vendorName: selectedVendor === "no-vendor" ? null : vendors.find((v) => v.id === selectedVendor)?.name || null,
+      vendorName: selectedVendor === "no-vendor" ? null : vendors.find((v) => v._id === selectedVendor)?.name || null,
     }))
 
     // Add to queue
@@ -512,7 +528,7 @@ export function DragDropUpload() {
               </motion.h3>
 
               <p className="text-muted-foreground text-center mb-6 max-w-md">
-                Drag and drop multiple resume files here, or click to browse. We'll analyze them against ATS systems and
+                Drag and drop multiple resume files here, or click to browse. We&apos;ll analyze them against ATS systems and
                 provide detailed feedback.
               </p>
 
@@ -525,7 +541,7 @@ export function DragDropUpload() {
                   <SelectContent className="max-h-[300px]">
                     <SelectItem value="no-vendor">No Vendor</SelectItem>
                     {vendors.map((vendor) => (
-                      <SelectItem key={vendor.id} value={vendor.id}>
+                      <SelectItem key={vendor._id} value={vendor._id}>
                         <div className="flex flex-col">
                           <span>{vendor.name}</span>
                           {vendor.state && vendor.country && (

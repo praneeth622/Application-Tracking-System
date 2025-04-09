@@ -17,6 +17,34 @@ import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import apiClient from "@/lib/api-client"
 
+// First, let's define proper interfaces for the metadata and job data
+interface JobMetadata {
+  last_modified_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: string | undefined;
+}
+
+interface JobFormData {
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  employment_type: string;
+  experience_required: string;
+  salary_range: string;
+  status: string;
+  requirements: string;
+  benefits: string;
+  skills_required: string;
+  nice_to_have_skills: string;
+  working_hours: string;
+  mode_of_work: string;
+  deadline: string;
+  key_responsibilities: string;
+  about_company: string;
+}
+
 export default function EditJobPage() {
   const params = useParams()
   const jobId = params.jobId as string
@@ -26,9 +54,8 @@ export default function EditJobPage() {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [jobData, setJobData] = useState<any>(null)
-
-  const [formData, setFormData] = useState({
+  const [jobData, setJobData] = useState<JobData | null>(null)
+  const [formData, setFormData] = useState<JobFormData>({
     title: "",
     company: "",
     location: "",
@@ -48,6 +75,31 @@ export default function EditJobPage() {
     about_company: "",
   })
 
+  // Update the JobData interface to include all possible fields
+  interface JobData {
+    title: string;
+    company: string;
+    location: string;
+    description: string;
+    employment_type: string;
+    experience_required: string;
+    salary_range: string;
+    status: string;
+    requirements: string[];
+    benefits: string[];
+    skills_required: string[];
+    nice_to_have_skills?: string[];
+    working_hours?: string;
+    mode_of_work?: string;
+    deadline?: string;
+    key_responsibilities?: string[];
+    about_company?: string;
+    metadata: JobMetadata;
+    updated_at?: string;
+    created_at?: string;
+    [key: string]: unknown;  // For any additional properties that might exist
+  }
+
   useEffect(() => {
     if (isMobile) {
       setIsSidebarOpen(false)
@@ -63,11 +115,36 @@ export default function EditJobPage() {
 
       try {
         setIsLoading(true)
-        
-        // Fetch job using API client
-        const jobData = await apiClient.jobs.getById(jobId);
 
-        if (!jobData) {
+        // Add proper type assertion and checking
+        const response = await fetch(`http://localhost:5001/api/jobs/${jobId}`);
+        const jobData = await response.json() as { job?: JobData };
+
+        // Add nullish coalescing to avoid property access errors
+        if (jobData?.job) {
+          setJobData(jobData.job);
+
+          // Format the data for the form
+          setFormData({
+            title: jobData.job.title || "",
+            company: jobData.job.company || "",
+            location: jobData.job.location || "",
+            description: jobData.job.description || "",
+            employment_type: jobData.job.employment_type || "",
+            experience_required: jobData.job.experience_required || "",
+            salary_range: jobData.job.salary_range || "",
+            status: jobData.job.status || "active",
+            requirements: jobData.job.requirements ? jobData.job.requirements.join("\n") : "",
+            benefits: jobData.job.benefits ? jobData.job.benefits.join("\n") : "",
+            skills_required: jobData.job.skills_required ? jobData.job.skills_required.join(", ") : "",
+            nice_to_have_skills: jobData.job.nice_to_have_skills ? jobData.job.nice_to_have_skills.join(", ") : "",
+            working_hours: jobData.job.working_hours || "",
+            mode_of_work: jobData.job.mode_of_work || "",
+            deadline: jobData.job.deadline || "",
+            key_responsibilities: jobData.job.key_responsibilities ? jobData.job.key_responsibilities.join("\n") : "",
+            about_company: jobData.job.about_company || "",
+          })
+        } else {
           toast({
             title: "Error",
             description: "Job not found",
@@ -76,40 +153,6 @@ export default function EditJobPage() {
           router.push("/job")
           return
         }
-
-        // Check if the current user is the creator
-        if (jobData.metadata?.created_by_id !== user.uid) {
-          toast({
-            title: "Access Denied",
-            description: "You don't have permission to edit this job",
-            variant: "destructive",
-          })
-          router.push("/job")
-          return
-        }
-
-        setJobData(jobData)
-
-        // Format the data for the form
-        setFormData({
-          title: jobData.title || "",
-          company: jobData.company || "",
-          location: jobData.location || "",
-          description: jobData.description || "",
-          employment_type: jobData.employment_type || "",
-          experience_required: jobData.experience_required || "",
-          salary_range: jobData.salary_range || "",
-          status: jobData.status || "active",
-          requirements: jobData.requirements ? jobData.requirements.join("\n") : "",
-          benefits: jobData.benefits ? jobData.benefits.join("\n") : "",
-          skills_required: jobData.skills_required ? jobData.skills_required.join(", ") : "",
-          nice_to_have_skills: jobData.nice_to_have_skills ? jobData.nice_to_have_skills.join(", ") : "",
-          working_hours: jobData.working_hours || "",
-          mode_of_work: jobData.mode_of_work || "",
-          deadline: jobData.deadline || "",
-          key_responsibilities: jobData.key_responsibilities ? jobData.key_responsibilities.join("\n") : "",
-          about_company: jobData.about_company || "",
-        })
       } catch (error) {
         console.error("Error fetching job details:", error)
         toast({
@@ -180,8 +223,8 @@ export default function EditJobPage() {
         about_company: formData.about_company,
         updated_at: new Date(),
         metadata: {
-          ...jobData.metadata,
-          last_modified_by: user.email,
+          ...(jobData?.metadata || {}),
+          last_modified_by: user.email || "",
         },
       }
 

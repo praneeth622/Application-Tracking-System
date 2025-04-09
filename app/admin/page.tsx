@@ -23,12 +23,20 @@ interface StatsCard {
   icon: React.ReactNode;
 }
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  uid: string; // Changed from optional to required to match UserData interface
+}
+
 export default function AdminPage() {
-  const { userProfile, isAdmin, refreshUserProfile } = useAuth();
+  const { userProfile, refreshUserProfile } = useAuth();
   const { toast } = useToast();
   const [stats, setStats] = useState<StatsCard[]>([]);
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [apiStatus, setApiStatus] = useState<'loading' | 'online' | 'offline'>('loading');
@@ -36,52 +44,12 @@ export default function AdminPage() {
   const router = useRouter();
   const initialCheckRef = useRef(false);
 
-  // Check admin status once on load - with useRef to prevent multiple calls
-  useEffect(() => {
-    if (!initialCheckRef.current && userProfile === null) {
-      initialCheckRef.current = true;
-      const checkAdminStatus = async () => {
-        try {
-          await refreshUserProfile();
-        } catch (error) {
-          console.error("Error refreshing profile:", error);
-        }
-      };
-      
-      checkAdminStatus();
-    }
-  }, [refreshUserProfile, userProfile]);
-
-  // Display a non-admin page when the user isn't an admin
-  if (userProfile && userProfile.role !== 'admin') {
-    return (
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="text-center">
-          <div className="inline-block p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4">
-            <Shield className="h-8 w-8 text-yellow-600 dark:text-yellow-500" />
-          </div>
-          <h1 className="text-3xl font-bold mb-2">Admin Access Required</h1>
-          <p className="text-muted-foreground mb-8">
-            You need administrator privileges to access this page.
-          </p>
-          
-          <div className="max-w-sm mx-auto mb-8">
-            <MakeUserAdmin />
-          </div>
-          
-          <Button variant="outline" onClick={() => router.push('/dashboard')}>
-            Return to Dashboard
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Fetch stats for dashboard - useCallback to prevent unnecessary recreations
+  // Define all hooks first, before any conditional returns
   const fetchStats = useCallback(async () => {
-    if (!userProfile || userProfile.role !== 'admin' || isLoadingStats) return;
+    if (!userProfile || userProfile.role !== 'admin' || isLoadingStats) {
+      return;
+    }
     
-    // Set loading state
     setIsLoadingStats(true);
     setApiStatus('loading');
     
@@ -94,7 +62,11 @@ export default function AdminPage() {
       
       // Fetch users
       try {
-        usersData = await apiClient.auth.getAllUsers() || [];
+        const response = await apiClient.auth.getAllUsers();
+        usersData = Array.isArray(response) ? response.map(user => ({
+          ...user,
+          uid: user.id || user.uid || '' // Ensure uid is present as a non-empty string
+        })) : [];
       } catch (error) {
         console.error("Error fetching users:", error);
       }
@@ -186,19 +158,27 @@ export default function AdminPage() {
     }
   }, [userProfile, toast, isLoadingStats]);
 
-  // Fetch users when on the users tab
   const fetchUsers = useCallback(async () => {
-    if (!userProfile || userProfile.role !== 'admin' || isLoadingUsers) return;
+    if (!userProfile || userProfile.role !== 'admin' || isLoadingUsers) {
+      return;
+    }
     
     setIsLoadingUsers(true);
     try {
-      const response = await apiClient.auth.getAllUsers();
-      setUsers(response || []);
-    } catch (error: any) {
+      const response = await fetch('/api/admin/users');
+      const data = await response.json() as { users: User[] };
+      // Ensure each user has a uid property that's a string
+      const usersWithUid = (data.users || []).map(user => ({
+        ...user,
+        uid: user.uid || user.id || ''
+      }));
+      setUsers(usersWithUid);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       console.error("Error fetching users:", error);
       toast({
         title: "Failed to load users",
-        description: error.message || "An unexpected error occurred",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -206,21 +186,63 @@ export default function AdminPage() {
     }
   }, [userProfile, toast, isLoadingUsers]);
 
-  // Load initial data when the component mounts or tab changes
   useEffect(() => {
-    if (userProfile?.role === 'admin') {
-      if (activeTab === 'dashboard' && !dataLoaded && !isLoadingStats) {
-        fetchStats();
-      } else if (activeTab === 'users' && users.length === 0 && !isLoadingUsers) {
-        fetchUsers();
-      }
+    if (!initialCheckRef.current && userProfile === null) {
+      initialCheckRef.current = true;
+      const checkAdminStatus = async () => {
+        try {
+          await refreshUserProfile();
+        } catch (error) {
+          console.error("Error refreshing profile:", error);
+        }
+      };
+      
+      checkAdminStatus();
+    }
+  }, [refreshUserProfile, userProfile]);
+
+  useEffect(() => {
+    const shouldFetchData = userProfile?.role === 'admin';
+    
+    if (!shouldFetchData) {
+      return;
+    }
+
+    if (activeTab === 'dashboard' && !dataLoaded && !isLoadingStats) {
+      fetchStats();
+    } else if (activeTab === 'users' && users.length === 0 && !isLoadingUsers) {
+      fetchUsers();
     }
   }, [activeTab, userProfile, dataLoaded, users.length, fetchStats, fetchUsers, isLoadingUsers, isLoadingStats]);
 
-  // Handle tab change
   const handleTabChange = (value: string) => {
     setActiveTab(value);
   };
+
+  // Now we can do the conditional return
+  if (userProfile && userProfile.role !== 'admin') {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="text-center">
+          <div className="inline-block p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4">
+            <Shield className="h-8 w-8 text-yellow-600 dark:text-yellow-500" />
+          </div>
+          <h1 className="text-3xl font-bold mb-2">Admin Access Required</h1>
+          <p className="text-muted-foreground mb-8">
+            You need administrator privileges to access this page.
+          </p>
+          
+          <div className="max-w-sm mx-auto mb-8">
+            <MakeUserAdmin />
+          </div>
+          
+          <Button variant="outline" onClick={() => router.push('/dashboard')}>
+            Return to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <DashboardShell>
@@ -238,7 +260,7 @@ export default function AdminPage() {
             } catch (error) {
               toast({
                 title: "Refresh failed",
-                description: "Could not refresh profile",
+                description: `${error}`,
                 variant: "destructive",
               });
             }

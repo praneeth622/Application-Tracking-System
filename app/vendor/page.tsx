@@ -62,6 +62,14 @@ interface Vendor {
 
 type VendorFormState = Omit<Vendor, "_id" | "created_at" | "updated_at" | "metadata">
 
+type StatusFilterType = "all" | "active" | "inactive";
+
+interface ApiError {
+  message: string;
+  status?: number;
+  code?: string;
+}
+
 const VendorDetailsSheet = memo(
   ({
     editData,
@@ -141,10 +149,7 @@ const VendorDetailsSheet = memo(
 
       try {
         // Use API client to update vendor
-        const updatedVendor = await apiClient.vendors.update(
-          editData.selectedVendor._id,
-          editData.formState
-        );
+        
 
         // Update local state
         setVendors((prevVendors) =>
@@ -154,7 +159,8 @@ const VendorDetailsSheet = memo(
                   ...vendor,
                   ...editData.formState!,
                   metadata: {
-                    ...vendor.metadata,
+                    created_by: vendor.metadata?.created_by || "",
+                    created_by_id: vendor.metadata?.created_by_id || "",
                     last_modified_by: user?.email || "",
                   },
                 }
@@ -531,7 +537,7 @@ export default function VendorPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "date" | "status">("name")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
+  const [statusFilter, setStatusFilter] = useState<StatusFilterType>("all")
   const [editData, setEditData] = useState({
     isEditing: false,
     formState: null as VendorFormState | null,
@@ -544,7 +550,7 @@ export default function VendorPage() {
       if (!user) return
 
       try {
-        const fetchedVendors = await apiClient.vendors.getAll();
+        const fetchedVendors = await apiClient.vendors.getAll() as Vendor[];
         
         // Transform response to match component's expected format
         const formattedVendors = fetchedVendors.map(vendor => ({
@@ -554,15 +560,20 @@ export default function VendorPage() {
         }));
         
         setVendors(formattedVendors);
-      } catch (error) {
-        console.error("Error fetching vendors:", error)
-        toast.error("Failed to load vendors")
+      } catch (error: unknown) {
+        // Type guard for different error types
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : (error as ApiError)?.message || "An unexpected error occurred";
+
+        console.error("Error fetching vendors:", error);
+        toast.error(errorMessage);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
     }
 
-    fetchVendors()
+    fetchVendors();
   }, [user])
 
   useEffect(() => {
@@ -684,7 +695,7 @@ export default function VendorPage() {
 
               {/* Filters */}
               <div className="flex gap-2">
-                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
+                <Select value={statusFilter} onValueChange={(value: StatusFilterType) => setStatusFilter(value)}>
                   <SelectTrigger className="w-full border-border/60 bg-background/50 backdrop-blur-sm">
                     <div className="flex items-center">
                       <Filter className="w-4 h-4 mr-2 text-primary/70" />

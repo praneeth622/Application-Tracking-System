@@ -5,6 +5,7 @@ import { useInView } from "react-intersection-observer"
 import { Star } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useState } from "react"
+import Image from "next/image"
 
 const testimonials = [
   {
@@ -74,7 +75,7 @@ export function TestimonialsGrid() {
     threshold: 0.1,
   })
 
-  const { theme } = useTheme()
+  const { } = useTheme()
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
 
   const container = {
@@ -210,7 +211,7 @@ export function TestimonialsGrid() {
               {(!testimonial.stats.length ||
                 (!testimonial.stats[0].value.includes("%") && !testimonial.stats[0].value.startsWith("+"))) && (
                 <blockquote className="text-gray-800 dark:text-gray-200 font-medium mb-4 relative z-10">
-                  "{testimonial.quote}"
+                  &ldquo;{testimonial.quote}&rdquo;
                 </blockquote>
               )}
 
@@ -218,11 +219,14 @@ export function TestimonialsGrid() {
                 {testimonial.name && (
                   <div className="flex items-center">
                     {index % 2 === 0 && (
-                      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden mr-3">
-                        <img
-                          src={`/placeholder.svg?height=40&width=40`}
+                      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden mr-3 relative">
+                        <Image
+                          src="/placeholder.svg"
                           alt={testimonial.name}
-                          className="w-full h-full object-cover"
+                          width={40}
+                          height={40}
+                          className="object-cover"
+                          priority={index < 4} // Prioritize loading for first 4 images
                         />
                       </div>
                     )}
@@ -237,7 +241,7 @@ export function TestimonialsGrid() {
               {testimonial.stats.length > 0 &&
                 (testimonial.stats[0].value.includes("%") || testimonial.stats[0].value.startsWith("+")) && (
                   <blockquote className="text-gray-800 dark:text-gray-200 font-medium mt-4 relative z-10">
-                    "{testimonial.quote}"
+                    &ldquo;{testimonial.quote}&rdquo;
                   </blockquote>
                 )}
             </motion.div>
