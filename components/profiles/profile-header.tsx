@@ -1,15 +1,20 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import type { Timestamp } from "firebase/firestore"
 import { ArrowLeft, Download, Eye, Calendar, CheckCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
+
+// Create a simplified Timestamp interface that matches what our API returns
+interface SimpleTimestamp {
+  seconds: number;
+  nanoseconds: number;
+}
 
 interface ProfileHeaderProps {
   profile: {
     filename: string
     filelink: string
-    uploadedAt: Timestamp
+    uploadedAt: SimpleTimestamp
     aiAnalysis?: string
     analysis?: {
       name: string

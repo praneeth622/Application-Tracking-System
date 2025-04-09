@@ -327,6 +327,55 @@ const apiClient = {
     getResume: (id: string) => fetcher({ url: `/resumes/${id}` }),
     deleteResume: (id: string) => fetcher({ url: `/resumes/${id}`, method: 'DELETE' }),
     getAllForMatching: () => fetcher({ url: '/jobs/resumes/all' }),
+    
+    // Add new methods for getting resume content with proper auth
+    getResumeContent: async (id: string) => {
+      const token = await getAuthToken();
+      
+      if (!token) {
+        throw new Error("Authentication required to view resume");
+      }
+      
+      // Use a direct fetch with arraybuffer response type
+      const response = await fetch(`${API_BASE_URL}/resumes/${id}/content`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get resume content: ${errorText}`);
+      }
+      
+      const data = await response.arrayBuffer();
+      return { data };
+    },
+    
+    downloadResume: async (id: string) => {
+      const token = await getAuthToken();
+      
+      if (!token) {
+        throw new Error("Authentication required to download resume");
+      }
+      
+      // Use a direct fetch with blob response type
+      const response = await fetch(`${API_BASE_URL}/resumes/${id}/download`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to download resume: ${errorText}`);
+      }
+      
+      const data = await response.arrayBuffer();
+      return { data };
+    }
   },
   
   // Vendor API
