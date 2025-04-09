@@ -5,6 +5,7 @@ import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import { analyzeResume } from '../../utils/analyze-resume';
+import User from '../models/User';
 
 // Define interface for request with user
 interface AuthRequest extends Request {
@@ -50,26 +51,34 @@ export const saveResume = async (req: AuthRequest, res: Response) => {
       analysis, 
       vendor_id, 
       vendor_name,
-      userId  // Add userId as a potential field in the request body
+      userId 
     } = req.body;
     
-    // Try to get userId from request body if not in req.user (for bypass auth mode)
     const userIdentifier = req.user?.uid || userId;
     
-    if (!userIdentifier || !filename || !filelink || !fileHash || !analysis) {
-      return res.status(400).json({ 
-        error: 'Missing required fields',
-        details: {
-          userId: !userIdentifier,
-          filename: !filename,
-          filelink: !filelink,
-          fileHash: !fileHash, 
-          analysis: !analysis
-        }
-      });
+    if (!userIdentifier) {
+      return res.status(401).json({ error: 'User not authenticated' });
     }
     
-    // Check for duplicate
+    // Check if user exists in database
+    const user = await User.findOne({ uid: userIdentifier });
+    if (!user) {
+      // Create user if doesn't exist
+      try {
+        await User.create({
+          uid: userIdentifier,
+          email: req.user?.email || '',
+          role: 'user',
+          created_at: new Date(),
+          updated_at: new Date()
+        });
+      } catch (createError) {
+        console.error('Error creating user record:', createError);
+        // Continue even if user creation fails
+      }
+    }
+    
+    // Check for duplicate resume
     const existingResume = await Resume.findOne({
       user_id: userIdentifier,
       fileHash: fileHash

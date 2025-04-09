@@ -221,24 +221,61 @@ const apiClient = {
         return response;
       } catch (error) {
         if ((error as ApiError).status === 404) {
-          throw new Error('User not found in database');
+          // User not found, attempt to create a new user with current Firebase user data
+          console.log('User not found, attempting to create new user from Firebase auth');
+          const auth = getAuth();
+          const firebaseUser = auth.currentUser;
+          
+          if (!firebaseUser) {
+            console.error('No Firebase user found to create account');
+            return null;
+          }
+          
+          try {
+            // Create new user with Firebase auth data
+            const userData = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+            };
+            
+            const newUser = await apiClient.auth.createFromAuth(userData);
+            console.log('Successfully created new user from Firebase auth:', newUser);
+            return newUser;
+          } catch (createError) {
+            console.error('Failed to create user from Firebase auth:', createError);
+            return null;
+          }
         }
         throw error;
       }
     },
     updateUser: (data: Partial<UserData>) => 
       fetcher({ url: '/auth/me', method: 'PUT', body: data }),
-    getAllUsers: () => 
-      fetcher({ url: '/auth/users' }),
+    getAllUsers: async () => {
+      try {
+        const response = await fetcher({ url: '/auth/users' });
+        return response;
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        return []; // Return empty array instead of throwing
+      }
+    },
     updateUserRole: (data: { uid: string; role: string }) => 
       fetcher({ url: '/auth/users/role', method: 'PUT', body: data }),
-    createFromAuth: (data: {uid: string, email: string, name?: string}) => {
-      return fetcher({ 
-        url: '/auth/create-from-auth', 
-        method: 'POST', 
-        body: data, 
-        skipAuth: true 
-      });
+    createFromAuth: async (data: {uid: string, email: string, name?: string}) => {
+      try {
+        const response = await fetcher({ 
+          url: '/auth/create-from-auth', 
+          method: 'POST', 
+          body: data, 
+          skipAuth: true 
+        });
+        return response;
+      } catch (error) {
+        console.error('Error creating user from auth:', error);
+        throw error;
+      }
     },
     makeAdmin: (data: {uid: string, email: string}) => {
       return fetcher({ 

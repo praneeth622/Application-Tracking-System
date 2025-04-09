@@ -29,11 +29,33 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
       // Verify the Firebase ID token
       const decodedToken = await admin.auth().verifyIdToken(idToken);
       
+      // Check if user exists in database
+      let user = await User.findOne({ uid: decodedToken.uid });
+      
+      // If user doesn't exist, create new user record
+      if (!user) {
+        try {
+          user = await User.create({
+            uid: decodedToken.uid,
+            email: decodedToken.email || '',
+            name: decodedToken.name || '',
+            role: 'user', // Default role
+            created_at: new Date(),
+            updated_at: new Date()
+          });
+          console.log('Created new user record:', user);
+        } catch (createError) {
+          console.error('Error creating user record:', createError);
+          // Continue even if user creation fails
+        }
+      }
+      
       // Add the verified user to the request
       req.user = {
         uid: decodedToken.uid,
         email: decodedToken.email || '',
-        role: decodedToken.role || 'user', // Default to 'user' role if not specified
+        role: user?.role || 'user',
+        name: user?.name || decodedToken.name || ''
       };
       
       return next();
