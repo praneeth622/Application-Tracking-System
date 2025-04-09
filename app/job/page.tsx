@@ -8,13 +8,12 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAuth } from "@/context/auth-context"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
-import { collection, getDocs, doc, getDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
 import { toast } from "@/components/ui/use-toast"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Card, CardContent } from "@/components/ui/card"
 import { motion } from "framer-motion"
+import apiClient from "@/lib/api-client"
 
 // Import components
 import { JobCard } from "@/components/job/job-card"
@@ -24,7 +23,39 @@ import { JobPagination } from "@/components/job/job-pagination"
 import { JobDetailsSheet } from "@/components/job/job-details-sheet"
 
 // Import types
-import type { Job } from "@/types/job"
+import type { Job } from "@/types/jobs"
+
+interface JobApiResponse {
+  _id: string;
+  title: string;
+  company: string;
+  location: string;
+  employment_type: string;
+  experience_required: string;
+  salary_range: string;
+  created_at: string;
+  description: string;
+  status: string;
+  total_applications?: number;
+  shortlisted?: number;
+  rejected?: number;
+  in_progress?: number;
+  benefits?: string[];
+  requirements?: string[];
+  skills_required?: string[];
+  working_hours: string;
+  mode_of_work: string;
+  key_responsibilities: string[];
+  nice_to_have_skills: string[];
+  about_company: string;
+  deadline: string;
+  metadata?: {
+    created_by?: string;
+    created_by_id?: string;
+    last_modified_by?: string;
+  };
+  assigned_recruiters?: string[];
+}
 
 export default function JobPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -52,94 +83,52 @@ export default function JobPage() {
       if (!user) return
 
       try {
-        const jobsCollection = collection(db, "jobs")
-        const jobsSnapshot = await getDocs(jobsCollection)
-        const fetchedJobs: Job[] = []
-
-        // Fetch each job's data from the nested structure
-        for (const jobDoc of jobsSnapshot.docs) {
-          const jobDataRef = doc(db, "jobs", jobDoc.id, "data", "details")
-          const jobDataSnap = await getDoc(jobDataRef)
-
-          if (jobDataSnap.exists()) {
-            const data = jobDataSnap.data()
-
-            // Fetch the relevant profiles to get accurate application stats
-            const applicationStats = {
-              total_applications: data.total_applications || 0,
-              shortlisted: data.shortlisted || 0,
-              rejected: data.rejected || 0,
-              in_progress: data.in_progress || 0,
-            }
-
-            try {
-              // Try to get more accurate stats from the relevant_profiles collection
-              const profilesRef = doc(db, "jobs", jobDoc.id, "relevant_profiles", "profiles")
-              const profilesSnap = await getDoc(profilesRef)
-
-              if (profilesSnap.exists() && profilesSnap.data().candidates) {
-                const candidates = profilesSnap.data().candidates
-                applicationStats.total_applications = candidates.length
-
-                // Count candidates by status
-                applicationStats.shortlisted = candidates.filter(
-                  (c: any) => c.tracking?.status === "shortlisted" || c.tracking?.status === "approved",
-                ).length
-
-                applicationStats.rejected = candidates.filter(
-                  (c: any) => c.tracking?.status === "disapproved" || c.tracking?.status === "not_interested",
-                ).length
-
-                applicationStats.in_progress = candidates.filter(
-                  (c: any) =>
-                    c.tracking?.status &&
-                    c.tracking.status !== "shortlisted" &&
-                    c.tracking.status !== "approved" &&
-                    c.tracking.status !== "disapproved" &&
-                    c.tracking.status !== "not_interested",
-                ).length
-              }
-            } catch (error) {
-              console.warn("Error fetching application stats:", error)
-              // Continue with the default stats
-            }
-
-            fetchedJobs.push({
-              job_id: jobDoc.id,
-              title: data.title,
-              company: data.company,
-              location: data.location,
-              employment_type: data.employment_type,
-              experience_required: data.experience_required,
-              salary_range: data.salary_range,
-              created_at: data.created_at.toDate(),
-              description: data.description,
-              status: data.status,
-              total_applications: applicationStats.total_applications,
-              shortlisted: applicationStats.shortlisted,
-              rejected: applicationStats.rejected,
-              in_progress: applicationStats.in_progress,
-              benefits: data.benefits || [],
-              requirements: data.requirements || [],
-              skills_required: data.skills_required || [],
-              working_hours: data.working_hours,
-              mode_of_work: data.mode_of_work,
-              key_responsibilities: data.key_responsibilities,
-              nice_to_have_skills: data.nice_to_have_skills,
-              about_company: data.about_company,
-              deadline: data.deadline,
-              metadata: {
-                created_by: data.metadata?.created_by || "",
-                created_by_id: data.metadata?.created_by_id || "", // Store creator's ID
-                last_modified_by: data.metadata?.last_modified_by || "",
-              },
-              assigned_recruiters: data.assigned_recruiters || [],
-            })
+        setIsLoading(true)
+        
+        // Use API client to fetch jobs
+        const response = await apiClient.jobs.getAll();
+        // The API returns an array of jobs directly, not a { jobs: Job[] } object
+        const jobsArray = Array.isArray(response) ? response : [];
+        
+        // Transform the data to match the Job type
+        const transformedJobs: Job[] = jobsArray.map((job) => {
+          // Explicitly cast the job to JobApiResponse to access _id property
+          const jobData = job as unknown as JobApiResponse;
+          return {
+            job_id: jobData._id,
+            title: jobData.title,
+            company: jobData.company,
+            location: jobData.location,
+            employment_type: jobData.employment_type,
+            experience_required: jobData.experience_required,
+            salary_range: jobData.salary_range,
+            created_at: new Date(jobData.created_at),
+            description: jobData.description,
+            status: jobData.status,
+            total_applications: jobData.total_applications || 0,
+            shortlisted: jobData.shortlisted || 0,
+            rejected: jobData.rejected || 0,
+            in_progress: jobData.in_progress || 0,
+            benefits: jobData.benefits || [],
+            requirements: jobData.requirements || [],
+            skills_required: jobData.skills_required || [],
+            working_hours: jobData.working_hours,
+            mode_of_work: jobData.mode_of_work,
+            key_responsibilities: jobData.key_responsibilities,
+            nice_to_have_skills: jobData.nice_to_have_skills,
+            about_company: jobData.about_company,
+            deadline: jobData.deadline,
+            metadata: {
+              created_by: jobData.metadata?.created_by || "",
+              created_by_id: jobData.metadata?.created_by_id || "",
+              last_modified_by: jobData.metadata?.last_modified_by || "",
+            },
+            assigned_recruiters: jobData.assigned_recruiters || [],
           }
-        }
+        });
 
-        setJobs(fetchedJobs)
-        setFilteredJobs(fetchedJobs)
+        setJobs(transformedJobs)
+        setFilteredJobs(transformedJobs)
       } catch (error) {
         console.error("Error fetching jobs:", error)
         toast({
@@ -175,7 +164,7 @@ export default function JobPage() {
           job.title?.toLowerCase().includes(query) ||
           job.company?.toLowerCase().includes(query) ||
           job.location?.toLowerCase().includes(query) ||
-          job.skills_required?.some((skill) => skill && skill.toLowerCase().includes(query)),
+          job.skills_required?.some((skill: string) => skill && skill.toLowerCase().includes(query)),
       )
     }
 
@@ -220,12 +209,26 @@ export default function JobPage() {
   }
 
   // Add job deletion function after the handleJobUpdate function
-  const handleJobDelete = (jobId: string) => {
-    setJobs((prevJobs) => prevJobs.filter((job) => job.job_id !== jobId))
-        toast({
-          title: "Success",
-      description: "Job deleted successfully",
-    })
+  const handleJobDelete = async (jobId: string) => {
+    try {
+      // Call the API to delete the job
+      await apiClient.jobs.delete(jobId);
+      
+      // Update the state by filtering out the deleted job
+      setJobs((prevJobs) => prevJobs.filter((job) => job.job_id !== jobId));
+      
+      toast({
+        title: "Success",
+        description: "Job deleted successfully",
+      });
+    } catch (error) {
+      console.error("Error deleting job:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete job",
+        variant: "destructive",
+      });
+    }
   }
 
   return (

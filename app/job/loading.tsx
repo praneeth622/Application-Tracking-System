@@ -1,3 +1,4 @@
+"use client"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { JobCardSkeleton } from "@/components/job/job-card-skeleton"

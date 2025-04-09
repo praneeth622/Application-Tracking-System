@@ -2,13 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/context/auth-context"
-import { db } from "@/FirebaseConfig"
-import { doc, getDoc, type Timestamp } from "firebase/firestore"
-import { DashboardSidebar } from "@/components/dashboard-sidebar"
-import { motion } from "framer-motion"
-import { useMediaQuery } from "@/hooks/use-media-query"
-import { toast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { motion } from "framer-motion"
+import { toast } from "@/components/ui/use-toast"
 import { Icons } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,35 +13,53 @@ import { ProfileCard } from "@/components/profiles/profile-card"
 import { EmptyState } from "@/components/profiles/empty-state"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
+import { DashboardSidebar } from "@/components/dashboard-sidebar"
+import apiClient from "@/lib/api-client"
+
+interface Education {
+  degree: string;
+  major: string;
+  institute: string;
+  graduation_year?: string;
+  location?: string;
+}
+
+interface WorkExperience {
+  company: string;
+  position: string;
+  dates: string;
+  responsibilities: string[];
+  location?: string;
+}
 
 interface Analysis {
-  name: string
-  email: string
-  key_skills: string[]
-  education_details: Array<{
-    degree: string
-    major: string
-    institute: string
-    graduation_year?: string
-    location?: string
-  }>
-  work_experience_details: Array<{
-    company: string
-    position: string
-    dates: string
-    responsibilities: string[]
-    location?: string
-  }>
-  experience_years?: number
+  name: string;
+  email: string;
+  key_skills: string[];
+  education_details: Education[];
+  work_experience_details: WorkExperience[];
+  experience_years?: number;
 }
 
 interface Profile {
-  filename: string
-  filelink: string
-  uploadedAt: Timestamp
-  analysis: Analysis
-  aiAnalysis?: string
-  companyFeedback?: string[]
+  _id: string;
+  filename: string;
+  filelink: string;
+  uploaded_at: string;
+  analysis: Analysis;
+  aiAnalysis?: string;
+  companyFeedback?: string[];
+}
+
+interface ResumeApiResponse {
+  _id: string;
+  filename: string;
+  filelink: string;
+  uploaded_at?: string;
+  created_at?: string;
+  analysis: Analysis;
+  aiAnalysis?: string;
+  companyFeedback?: string[];
 }
 
 export default function ProfilesPage() {
@@ -57,22 +72,30 @@ export default function ProfilesPage() {
   const { user } = useAuth()
   const router = useRouter()
 
-  // Fetch profiles from database
+  // Fetch profiles from API
   useEffect(() => {
     const fetchProfiles = async () => {
       if (!user) return
       setIsLoading(true)
+      console.log('Fetching profiles for user:', user.uid);
       try {
-        const userDocRef = doc(db, "users", user.uid, "resumes", "data")
-        const userDoc = await getDoc(userDocRef)
-
-        if (userDoc.exists()) {
-          const userData = userDoc.data()
-          if (userData.resumes) {
-            setProfiles(userData.resumes)
-            setFilteredProfiles(userData.resumes)
-          }
-        }
+        // Use the API client to get resumes
+        const response = await apiClient.resumes.getUserResumes(user.uid);
+        const resumes = response as ResumeApiResponse[];
+        
+        // Transform MongoDB documents to match our UI needs
+        const transformedProfiles = resumes.map((resume: ResumeApiResponse) => ({
+          _id: resume._id,
+          filename: resume.filename,
+          filelink: resume.filelink,
+          uploaded_at: resume.uploaded_at || resume.created_at || new Date().toISOString(),
+          analysis: resume.analysis,
+          aiAnalysis: resume.aiAnalysis,
+          companyFeedback: resume.companyFeedback
+        }));
+        
+        setProfiles(transformedProfiles);
+        setFilteredProfiles(transformedProfiles);
       } catch (error) {
         console.error("Error fetching profiles:", error)
         toast({
@@ -140,6 +163,26 @@ export default function ProfilesPage() {
 
     setFilteredProfiles(filtered)
   }, [searchQuery, profiles])
+
+  // Add a delete resume function
+  // const handleDeleteResume = async (id: string) => {
+  //   try {
+  //     await apiClient.resumes.deleteResume(id);
+  //     // Update profiles list after deletion
+  //     setProfiles(profiles.filter(profile => profile._id !== id));
+  //     toast({
+  //       title: "Success",
+  //       description: "Resume deleted successfully",
+  //     })
+  //   } catch (error) {
+  //     console.error("Error deleting resume:", error);
+  //     toast({
+  //       title: "Error",
+  //       description: "Failed to delete resume",
+  //       variant: "destructive",
+  //     })
+  //   }
+  // }
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">

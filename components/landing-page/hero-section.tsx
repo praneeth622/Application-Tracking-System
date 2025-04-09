@@ -7,7 +7,7 @@ import { BrandCarousel } from "@/components/landing-page/brand-carousel"
 import { useTheme } from "next-themes"
 
 export function HeroSection() {
-  const { theme } = useTheme()
+  useTheme()
   const [isTyping, setIsTyping] = useState(true)
   const [placeholderText, setPlaceholderText] = useState("")
   const fullPlaceholder = "Ask PerfectAI to find me a tech lead in Seattle with cloud computing expertise."
@@ -72,9 +72,9 @@ export function HeroSection() {
   const floatingAnimation = {
     y: [0, -10, 0],
     transition: {
-      duration: 6,
-      repeat: Number.POSITIVE_INFINITY,
-      repeatType: "reverse",
+      duration: 2,
+      repeat: Infinity,
+      repeatType: "loop" as const, // Use a type assertion to 'const' to satisfy TypeScript
       ease: "easeInOut",
     },
   }

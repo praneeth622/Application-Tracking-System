@@ -1,5 +1,41 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import { saveResumeToFirebase } from "./firebase-helpers"
+import apiClient from "../lib/api-client"
+import { s3Client, bucketName } from "../AWSConfig"
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+import { v4 as uuidv4 } from "uuid"
+
+// Define an interface for resume data
+interface ResumeData {
+  _id?: string
+  fileHash: string
+  filename: string
+  filelink: string
+  analysis: any
+  vendor_id?: string
+  vendor_name?: string
+  user_id: string
+}
+
+// Add these interfaces at the top of the file, after the ResumeData interface
+interface DuplicateCheckResponse {
+  isDuplicate: boolean;
+  existingResume?: ResumeData;
+  message?: string;
+}
+
+interface SavedResumeResponse {
+  _id: string;
+  filename: string;
+  filelink: string;
+  fileHash: string;
+  analysis: any;
+  vendor_id?: string;
+  vendor_name?: string;
+  user_id: string;
+  uploaded_at: string;
+  [key: string]: any;
+}
 
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!)
 
@@ -88,13 +124,78 @@ export async function analyzeResume(
       console.error("Error parsing JSON response:", parseError)
       throw new Error("Invalid JSON response from AI model")
     }
-
-    // Save to Firebase with just vendor ID and name
-    const savedData = await saveResumeToFirebase(file, analysisJson, userId, userEmail, vendorId, vendorName)
-
-    return {
+    
+    // Generate file hash for duplicate checking
+    const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    // Check for duplicates using our API
+    try {
+      const duplicateCheck = await apiClient.resumes.checkDuplicate(fileHash, userId) as DuplicateCheckResponse;
+      if (duplicateCheck.isDuplicate) {
+        throw new Error('This resume has already been uploaded');
+      }
+    } catch (error) {
+      console.error("Error checking for duplicate resume:", error);
+      // Check if the error response contains HTML (indicating a server error page)
+      if (error instanceof Error && error.message.includes('<!DOCTYPE')) {
+        throw new Error('Server error: The API returned an HTML page instead of JSON. Check your server configuration.');
+      }
+      // Re-throw the original error
+      throw error;
+    }
+    
+    // Generate unique filename
+    const uniqueFilename = `${uuidv4()}_${file.name}`;
+    
+    // Upload file to AWS S3
+    const s3Key = `resumes/${userId}/${uniqueFilename}`;
+    
+    // Create put command for S3
+    const uploadParams = {
+      Bucket: bucketName,
+      Key: s3Key,
+      Body: new Uint8Array(fileBuffer),
+      ContentType: file.type,
+    };
+    
+    // Upload to S3
+    await s3Client.send(new PutObjectCommand(uploadParams));
+    
+    // Generate a signed URL (valid for 7 days)
+    const getObjectCommand = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: s3Key
+    });
+    
+    const filelink = await getSignedUrl(s3Client, getObjectCommand, { expiresIn: 604800 }); // 7 days
+    
+    // Save to MongoDB through our API
+    const resumeData: Omit<ResumeData, "_id"> = {
+      filename: uniqueFilename,
+      filelink,
+      fileHash,
       analysis: analysisJson,
-      savedData,
+      vendor_id: vendorId || undefined,
+      vendor_name: vendorName || undefined,
+      user_id: userId  
+    };
+    
+    try {
+      const savedData = await apiClient.resumes.saveResume(resumeData) as SavedResumeResponse;
+      return {
+        analysis: analysisJson,
+        savedData,
+      };
+    } catch (error) {
+      console.error("Error saving resume to database:", error);
+      // Check if the error response contains HTML
+      if (error instanceof Error && error.message.includes('<!DOCTYPE')) {
+        throw new Error('Server error: The API returned an HTML page instead of JSON. Check your server configuration.');
+      }
+      // Re-throw the original error
+      throw error;
     }
   } catch (error) {
     console.error("Error analyzing resume:", error)

@@ -1,7 +1,5 @@
-import { Loader2, Filter, Search } from "lucide-react"
+import { Loader2, Filter } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
 
 export default function Loading() {
   return (

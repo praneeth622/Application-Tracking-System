@@ -80,25 +80,29 @@ export const analyzeBatchMatches = async (jobData: any, resumes: any[]) => {
       const batch = resumes.slice(i, i + batchSize);
       const batchPromises = batch.map(resume => analyzeMatch(jobData, resume));
       
-      // Wait for all resumes in this batch to be processed
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
+      try {
+        // Wait for all resumes in this batch to be processed
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Filter out null results and add filename from the original resume
+        const validResults = batchResults.map((result, index) => {
+          if (!result) return null;
+          return {
+            ...result,
+            filename: batch[index].filename
+          };
+        }).filter(result => result !== null);
+        
+        results.push(...validResults);
+      } catch (batchError) {
+        console.error("Error processing batch:", batchError);
+        // Continue with next batch instead of failing the entire process
+      }
     }
     
     return results;
   } catch (error) {
     console.error("Error in batch match analysis:", error);
-    // Return resumes with empty match analysis if batch processing fails
-    return resumes.map(resume => ({
-      ...resume,
-      matchAnalysis: {
-        matchPercentage: 0,
-        matchingSkills: [],
-        missingRequirements: ["Failed to analyze requirements"],
-        experienceMatch: false,
-        educationMatch: false,
-        overallAssessment: "Failed to analyze match due to an error."
-      }
-    }));
+    return [];
   }
 };

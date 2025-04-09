@@ -149,7 +149,7 @@ export function OutreachSection() {
             <div className="mb-4">
               <p className="text-sm text-gray-800 dark:text-gray-200 mb-2">Hi Jamie,</p>
               <p className="text-sm text-gray-800 dark:text-gray-200 mb-2">
-                I hope this finds you well! I'm reaching out because your experience at{" "}
+                I hope this finds you well! I&apos;m reaching out because your experience at{" "}
                 <span className="text-violet-600 dark:text-violet-400">Acme Corp</span> caught my attention.
               </p>
               <p className="text-sm text-gray-800 dark:text-gray-200">
@@ -200,7 +200,7 @@ export function OutreachSection() {
             Gets Replies
           </h2>
           <p className="text-lg text-gray-600 dark:text-gray-300">
-            Send personalized messages crafted with insights from candidates' careers and goals. Reach out on LinkedIn,
+            Send personalized messages crafted with insights from candidates&apos; careers and goals. Reach out on LinkedIn,
             email, or SMS—and get the responses you need.
           </p>
         </motion.div>

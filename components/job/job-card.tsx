@@ -5,7 +5,7 @@ import { formatDistanceToNow } from "date-fns"
 import { Briefcase, Building, MapPin, DollarSign, Users, CheckCircle, XCircle, AlertCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import type { Job } from "@/types/job"
+import type { Job } from "@/types/jobs"
 
 interface JobCardProps {
   job: Job

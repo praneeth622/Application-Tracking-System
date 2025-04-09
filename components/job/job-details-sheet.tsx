@@ -48,10 +48,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ShowRelevantCandidatesButton } from "@/components/show-relevant-candidates-button"
 import { toast } from "@/components/ui/use-toast"
-import type { Job } from "@/types/job"
-import { doc, updateDoc, arrayUnion, deleteDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
+import type { Job } from "@/types/jobs"
 import { useRouter } from "next/navigation"
+import apiClient from "@/lib/api-client"
 
 interface JobDetailsSheetProps {
   job: Job | null
@@ -94,15 +93,8 @@ export function JobDetailsSheet({
 
     setIsAssigning(true)
     try {
-      const jobDataRef = doc(db, "jobs", job.job_id, "data", "details")
-      await updateDoc(jobDataRef, {
-        assigned_recruiters: arrayUnion(currentUserId),
-        updated_at: new Date(),
-        metadata: {
-          ...job.metadata,
-          last_modified_by: currentUserId,
-        },
-      })
+      // Use API client to assign the job to the current user
+      await apiClient.jobs.assignRecruiters(job.job_id, [currentUserId]);
 
       toast({
         title: "Success",
@@ -161,11 +153,8 @@ export function JobDetailsSheet({
 
     setIsDeleting(true)
     try {
-      // Delete the job document
-      await deleteDoc(doc(db, "jobs", job.job_id))
-
-      // Delete the details document in the nested structure
-      await deleteDoc(doc(db, "jobs", job.job_id, "data", "details"))
+      // Delete the job using the API client
+      await apiClient.jobs.delete(job.job_id);
 
       toast({
         title: "Success",

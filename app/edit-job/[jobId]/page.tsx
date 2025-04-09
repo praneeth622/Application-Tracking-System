@@ -4,8 +4,6 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { doc, getDoc, updateDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
 import { useAuth } from "@/context/auth-context"
 import { ArrowLeft, Briefcase, Clock, Building, FileText, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,6 +15,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/components/ui/use-toast"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import apiClient from "@/lib/api-client"
+
+// First, let's define proper interfaces for the metadata and job data
+interface JobMetadata {
+  last_modified_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: string | undefined;
+}
+
+interface JobFormData {
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  employment_type: string;
+  experience_required: string;
+  salary_range: string;
+  status: string;
+  requirements: string;
+  benefits: string;
+  skills_required: string;
+  nice_to_have_skills: string;
+  working_hours: string;
+  mode_of_work: string;
+  deadline: string;
+  key_responsibilities: string;
+  about_company: string;
+}
 
 export default function EditJobPage() {
   const params = useParams()
@@ -27,9 +54,8 @@ export default function EditJobPage() {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [jobData, setJobData] = useState<any>(null)
-
-  const [formData, setFormData] = useState({
+  const [jobData, setJobData] = useState<JobData | null>(null)
+  const [formData, setFormData] = useState<JobFormData>({
     title: "",
     company: "",
     location: "",
@@ -49,6 +75,31 @@ export default function EditJobPage() {
     about_company: "",
   })
 
+  // Update the JobData interface to include all possible fields
+  interface JobData {
+    title: string;
+    company: string;
+    location: string;
+    description: string;
+    employment_type: string;
+    experience_required: string;
+    salary_range: string;
+    status: string;
+    requirements: string[];
+    benefits: string[];
+    skills_required: string[];
+    nice_to_have_skills?: string[];
+    working_hours?: string;
+    mode_of_work?: string;
+    deadline?: string;
+    key_responsibilities?: string[];
+    about_company?: string;
+    metadata: JobMetadata;
+    updated_at?: string;
+    created_at?: string;
+    [key: string]: unknown;  // For any additional properties that might exist
+  }
+
   useEffect(() => {
     if (isMobile) {
       setIsSidebarOpen(false)
@@ -64,10 +115,36 @@ export default function EditJobPage() {
 
       try {
         setIsLoading(true)
-        const jobRef = doc(db, "jobs", jobId, "data", "details")
-        const jobSnap = await getDoc(jobRef)
 
-        if (!jobSnap.exists()) {
+        // Add proper type assertion and checking
+        const response = await fetch(`http://localhost:5001/api/jobs/${jobId}`);
+        const jobData = await response.json() as { job?: JobData };
+
+        // Add nullish coalescing to avoid property access errors
+        if (jobData?.job) {
+          setJobData(jobData.job);
+
+          // Format the data for the form
+          setFormData({
+            title: jobData.job.title || "",
+            company: jobData.job.company || "",
+            location: jobData.job.location || "",
+            description: jobData.job.description || "",
+            employment_type: jobData.job.employment_type || "",
+            experience_required: jobData.job.experience_required || "",
+            salary_range: jobData.job.salary_range || "",
+            status: jobData.job.status || "active",
+            requirements: jobData.job.requirements ? jobData.job.requirements.join("\n") : "",
+            benefits: jobData.job.benefits ? jobData.job.benefits.join("\n") : "",
+            skills_required: jobData.job.skills_required ? jobData.job.skills_required.join(", ") : "",
+            nice_to_have_skills: jobData.job.nice_to_have_skills ? jobData.job.nice_to_have_skills.join(", ") : "",
+            working_hours: jobData.job.working_hours || "",
+            mode_of_work: jobData.job.mode_of_work || "",
+            deadline: jobData.job.deadline || "",
+            key_responsibilities: jobData.job.key_responsibilities ? jobData.job.key_responsibilities.join("\n") : "",
+            about_company: jobData.job.about_company || "",
+          })
+        } else {
           toast({
             title: "Error",
             description: "Job not found",
@@ -76,42 +153,6 @@ export default function EditJobPage() {
           router.push("/job")
           return
         }
-
-        const data = jobSnap.data()
-
-        // Check if the current user is the creator
-        if (data.metadata?.created_by_id !== user.uid) {
-          toast({
-            title: "Access Denied",
-            description: "You don't have permission to edit this job",
-            variant: "destructive",
-          })
-          router.push("/job")
-          return
-        }
-
-        setJobData(data)
-
-        // Format the data for the form
-        setFormData({
-          title: data.title || "",
-          company: data.company || "",
-          location: data.location || "",
-          description: data.description || "",
-          employment_type: data.employment_type || "",
-          experience_required: data.experience_required || "",
-          salary_range: data.salary_range || "",
-          status: data.status || "active",
-          requirements: data.requirements ? data.requirements.join("\n") : "",
-          benefits: data.benefits ? data.benefits.join("\n") : "",
-          skills_required: data.skills_required ? data.skills_required.join(", ") : "",
-          nice_to_have_skills: data.nice_to_have_skills ? data.nice_to_have_skills.join(", ") : "",
-          working_hours: data.working_hours || "",
-          mode_of_work: data.mode_of_work || "",
-          deadline: data.deadline || "",
-          key_responsibilities: data.key_responsibilities ? data.key_responsibilities.join("\n") : "",
-          about_company: data.about_company || "",
-        })
       } catch (error) {
         console.error("Error fetching job details:", error)
         toast({
@@ -182,14 +223,13 @@ export default function EditJobPage() {
         about_company: formData.about_company,
         updated_at: new Date(),
         metadata: {
-          ...jobData.metadata,
-          last_modified_by: user.email,
+          ...(jobData?.metadata || {}),
+          last_modified_by: user.email || "",
         },
       }
 
-      // Update the job in Firestore
-      const jobRef = doc(db, "jobs", jobId, "data", "details")
-      await updateDoc(jobRef, processedData)
+      // Update the job using API client
+      await apiClient.jobs.update(jobId, processedData);
 
       toast({
         title: "Success",

@@ -19,8 +19,8 @@ const calculateSimilarity = (candidate1: Candidate, candidate2: Candidate): numb
   const skills2 = new Set(candidate2.analysis.key_skills.map((s) => s.toLowerCase()))
 
   // Calculate Jaccard similarity for skills
-  const intersection = new Set([...skills1].filter((x) => skills2.has(x)))
-  const union = new Set([...skills1, ...skills2])
+  const intersection = new Set(Array.from(skills1).filter((x) => skills2.has(x)))
+  const union = new Set([...Array.from(skills1), ...Array.from(skills2)])
 
   if (union.size > 0) {
     const skillSimilarity = intersection.size / union.size

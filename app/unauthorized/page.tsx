@@ -1,27 +1,44 @@
 "use client"
 
-import Link from "next/link"
-import { Shield, ArrowLeft } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { motion } from "framer-motion"
+import { ShieldAlert, ArrowLeft } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export default function UnauthorizedPage() {
+  const router = useRouter()
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="max-w-md mx-auto text-center">
-        <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Shield className="w-8 h-8 text-destructive" />
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="max-w-md w-full mx-auto text-center"
+      >
+        <div className="mb-6 flex justify-center">
+          <div className="p-4 rounded-full bg-red-100 dark:bg-red-900/20">
+            <ShieldAlert className="h-16 w-16 text-red-600 dark:text-red-400" />
+          </div>
         </div>
-        <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
-        <p className="text-muted-foreground mb-6">
-          You don&apos;t have permission to access this page.
+
+        <h1 className="text-3xl font-bold mb-3">Access Denied</h1>
+        <p className="text-muted-foreground mb-8">
+          You don&apos;t have permission to access this area. 
+          This section is restricted to administrators only.
         </p>
-        <Link
-          href="/upload-resume"
-          className="inline-flex items-center text-primary hover:underline"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
-        </Link>
-      </div>
+
+        <div className="flex flex-col gap-4">
+          <Button
+            onClick={() => router.push("/")}
+            variant="default"
+            className="w-full"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Return to Dashboard
+          </Button>
+        </div>
+      </motion.div>
     </div>
   )
 }

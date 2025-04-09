@@ -21,6 +21,7 @@ import {
   ArrowRightToLine,
   Building,
   Shield,
+  Key,
 } from "lucide-react"
 import { useMobile } from "@/hooks/use-mobile"
 import { toast } from "@/components/ui/use-toast"
@@ -137,6 +138,13 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
       icon: <Shield className="w-5 h-5" />,
       href: "/admin",
       adminOnly: true,
+    },
+    {
+      id: "admin-access",
+      label: "Admin Access",
+      icon: <Key className="w-5 h-5" />,
+      href: "/admin-access",
+      adminOnly: false,
     },
     // Add more admin-only navigation items here
   ]

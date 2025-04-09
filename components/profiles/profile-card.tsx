@@ -3,38 +3,38 @@
 import { Icons } from "@/components/icons"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
-import type { Timestamp } from "firebase/firestore"
 import { CalendarDays, Briefcase, GraduationCap } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 interface ProfileCardProps {
   profile: {
-    filename: string
-    filelink: string
-    uploadedAt: Timestamp
-    aiAnalysis?: string
+    _id: string;
+    filename: string;
+    filelink: string;
+    uploaded_at: string;
+    aiAnalysis?: string;
     analysis?: {
-      name: string
-      email: string
-      key_skills: string[]
+      name: string;
+      email: string;
+      key_skills: string[];
       education_details: Array<{
-        degree: string
-        major: string
-        institute: string
-        graduation_year?: string
-        location?: string
-      }>
+        degree: string;
+        major: string;
+        institute: string;
+        graduation_year?: string;
+        location?: string;
+      }>;
       work_experience_details: Array<{
-        company: string
-        position: string
-        dates: string
-        responsibilities: string[]
-        location?: string
-      }>
-      experience_years?: number
-      profile_summary?: string
-    }
-    companyFeedback?: string[]
+        company: string;
+        position: string;
+        dates: string;
+        responsibilities: string[];
+        location?: string;
+      }>;
+      experience_years?: number;
+      profile_summary?: string;
+    };
+    companyFeedback?: string[];
   }
 }
 
@@ -71,7 +71,7 @@ export function ProfileCard({ profile }: ProfileCardProps) {
   }
 
   const profileInfo = getProfileInfo()
-  const uploadDate = new Date(profile.uploadedAt.seconds * 1000)
+  const uploadDate = new Date(profile.uploaded_at)
   const formattedDate = uploadDate.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -81,7 +81,7 @@ export function ProfileCard({ profile }: ProfileCardProps) {
   return (
     <Card
       className="overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-primary/20 group cursor-pointer"
-      onClick={() => router.push(`/profiles/${encodeURIComponent(profile.filename)}`)}
+      onClick={() => router.push(`/profiles/${profile._id}`)}
     >
       <div className="h-2 bg-gradient-to-r from-primary/80 to-primary/40 w-full" />
       <CardHeader className="pb-2">

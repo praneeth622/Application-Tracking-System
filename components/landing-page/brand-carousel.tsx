@@ -17,7 +17,7 @@ const brands = [
 ]
 
 export function BrandCarousel() {
-  const { theme } = useTheme()
+  useTheme()
 
   return (
     <div className="w-full overflow-hidden">

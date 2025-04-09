@@ -11,11 +11,9 @@ import { useAuth } from "@/context/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
-import { toast } from "@/components/ui/use-toast"
-import { doc, writeBatch, Timestamp } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
-import { v4 as uuidv4 } from "uuid"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { toast } from "sonner"
+import apiClient from "@/lib/api-client"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -28,6 +26,7 @@ interface VendorFormData {
   address: string
   state: string
   country: string
+  status: string
 }
 
 export default function CreateVendorPage() {
@@ -45,61 +44,35 @@ export default function CreateVendorPage() {
     address: "",
     state: "",
     country: "",
+    status: "active"
   })
+
+  const handleFileButtonClick = () => {
+    const fileUploadElement = document.getElementById("fileInput") as HTMLInputElement;
+    if (fileUploadElement) {
+      fileUploadElement.click();
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
 
     if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to create a vendor",
-        variant: "destructive",
-      })
+      toast.error("You must be logged in to create a vendor")
       setIsSubmitting(false)
       return
     }
 
     try {
-      const vendorId = uuidv4()
-      const vendorData = {
-        ...formData,
-        created_at: Timestamp.now(),
-        status: "active",
-        metadata: {
-          created_by: user.email || "",
-          last_modified_by: user.email || "",
-        },
-      }
-
-      const vendorRef = doc(db, "vendors", vendorId)
-      const vendorDetailsRef = doc(db, "vendors", vendorId, "details", "info")
-
-      const batch = writeBatch(db)
-
-      batch.set(vendorRef, {
-        created_at: Timestamp.now(),
-        created_by: user.uid,
-      })
-
-      batch.set(vendorDetailsRef, vendorData)
-
-      await batch.commit()
-
-      toast({
-        title: "Success",
-        description: "Vendor added successfully",
-      })
-
+      // Use API client to create vendor
+      await apiClient.vendors.create(formData)
+      
+      toast.success("Vendor added successfully")
       router.push("/vendor")
     } catch (error) {
       console.error("Error creating vendor:", error)
-      toast({
-        title: "Error",
-        description: "Failed to add vendor",
-        variant: "destructive",
-      })
+      toast.error("Failed to add vendor")
       setIsSubmitting(false)
     }
   }
@@ -203,7 +176,10 @@ export default function CreateVendorPage() {
                     </div>
 
                     <div className="flex justify-end">
-                      <Button type="button" onClick={() => document.querySelector('[data-value="contact"]')?.click()}>
+                      <Button type="button" onClick={() => {
+                        handleFileButtonClick();
+                        (document.querySelector('[data-value="contact"]') as HTMLElement)?.click();
+                      }}>
                         Next: Contact Details
                       </Button>
                     </div>
@@ -250,30 +226,28 @@ export default function CreateVendorPage() {
                           required
                           value={formData.address}
                           onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                          placeholder="Enter complete business address"
-                          rows={3}
+                          placeholder="Enter full address"
+                          className="resize-none h-24"
                         />
                       </div>
                     </div>
 
                     <div className="flex justify-between">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => document.querySelector('[data-value="basic"]')?.click()}
-                      >
-                        Back to Basic Info
+                      <Button type="button" variant="outline" onClick={() => {
+                        (document.querySelector('[data-value="basic"]') as HTMLElement)?.click();
+                      }}>
+                        Back: Basic Information
                       </Button>
-                      <Button type="submit" disabled={isSubmitting}>
+                      <Button type="submit" disabled={isSubmitting} className="bg-primary">
                         {isSubmitting ? (
                           <>
-                            <span className="animate-spin mr-2">⏳</span>
+                            <span className="animate-spin mr-2">◌</span>
                             Creating...
                           </>
                         ) : (
                           <>
                             <CheckCircle className="w-4 h-4 mr-2" />
-                            Add Vendor
+                            Create Vendor
                           </>
                         )}
                       </Button>
@@ -282,10 +256,6 @@ export default function CreateVendorPage() {
                 </form>
               </Tabs>
             </CardContent>
-            <CardFooter className="flex justify-between border-t pt-6 text-sm text-muted-foreground">
-              <p>All fields are required</p>
-              <p>Vendor will be set to "Active" by default</p>
-            </CardFooter>
           </Card>
         </div>
       </motion.div>

@@ -1,12 +1,10 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { collection, getDocs, doc, getDoc, writeBatch, onSnapshot, setDoc, updateDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
 import {
   ArrowLeft,
   LayoutGrid,
@@ -23,6 +21,8 @@ import {
   Calendar,
   DollarSign,
   Building,
+  RefreshCw,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
@@ -49,6 +49,20 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { filterDuplicateCandidates } from "@/utils/filter-duplicates"
+import apiClient from "@/lib/api-client"
+
+interface ApiError {
+  message: string;
+  status?: number;
+  code?: string;
+}
+
+interface TransformedResume {
+  filename: string;
+  analysis: ResumeAnalysis;
+  userId: string;
+  userEmail: string;
+}
 
 interface MatchAnalysis {
   matchPercentage: number
@@ -70,6 +84,33 @@ interface WorkExperience {
   technologies?: string[]
 }
 
+interface EducationDetail {
+  degree: string;
+  major: string;
+  institute: string;
+}
+
+interface ResumeAnalysis {
+  name: string;
+  email: string;
+  key_skills: string[];
+  education_details: EducationDetail[];
+  work_experience_details: WorkExperience[];
+}
+
+interface Resume {
+  filename: string;
+  analysis: ResumeAnalysis;
+  userId: string;
+  userEmail: string;
+}
+
+interface User {
+  uid: string;
+  email: string;
+  role?: string;
+}
+
 export interface Candidate {
   filename: string
   name: string
@@ -85,23 +126,8 @@ export interface Candidate {
     work_experience_details: WorkExperience[]
   }
   tracking?: CandidateTracking
-}
-
-interface ResumeData {
-  filename: string
-  analysis: {
-    name: string
-    email: string
-    key_skills: string[]
-    education_details: Array<{
-      degree: string
-      major: string
-      institute: string
-    }>
-    work_experience_details: WorkExperience[]
-  }
-  userId: string
-  userEmail: string
+  userId?: string
+  userEmail?: string
 }
 
 export type CandidateStatus =
@@ -146,6 +172,27 @@ export interface CandidateTracking {
 // Number of candidates to show per page
 const CANDIDATES_PER_PAGE = 9
 
+// Define JobDetails interface for the job data
+interface JobDetails {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  employment_type: string;
+  experience_required: string;
+  mode_of_work: string;
+  required_skills: string[];
+  education_requirements?: string[];
+  job_description?: string;
+  minimum_experience_years?: number;
+  salary_range?: {
+    min: number;
+    max: number;
+    currency: string;
+  };
+}
+
+
 export default function CandidatesPage() {
   const params = useParams()
   const jobId = params.jobId as string
@@ -157,307 +204,328 @@ export default function CandidatesPage() {
   const { user } = useAuth()
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
-  const [jobDetails, setJobDetails] = useState<any>(null)
+  const [jobDetails, setJobDetails] = useState<JobDetails | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [sortBy, setSortBy] = useState<"match" | "name" | "date">("match")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [duplicatesRemoved, setDuplicatesRemoved] = useState(0)
+  const { currentView, setCurrentView, statusFilter, searchQuery, setSearchQuery } = useHiringStages()
 
-  const fetchResumes = async () => {
+  const fetchResumesFallback = useCallback(async () => {
     try {
-      // First check if we have candidates in relevant_profiles
-      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
-      const storedProfilesDoc = await getDoc(relevantProfilesRef);
+      let allResumes: TransformedResume[] = [];
       
-      if (storedProfilesDoc.exists() && storedProfilesDoc.data().candidates?.length > 0) {
-        console.log("Found existing candidates in relevant_profiles");
-        return storedProfilesDoc.data().candidates;
-      }
-
-      // Direct approach - try to get job data first
-      const jobRef = doc(db, "jobs", jobId);
-      const jobDoc = await getDoc(jobRef);
-      
-      if (jobDoc.exists() && jobDoc.data().resumes && Array.isArray(jobDoc.data().resumes)) {
-        console.log(`Found resumes directly in job document: ${jobDoc.data().resumes.length}`);
-        return jobDoc.data().resumes;
-      }
-      
-      // Try to get all users' resumes
-      let allResumes: ResumeData[] = [];
-      const usersRef = collection(db, "users");
-      const usersSnapshot = await getDocs(usersRef);
-      console.log(`Found ${usersSnapshot.size} users to check for resumes`);
-      
-      for (const userDoc of usersSnapshot.docs) {
+      if (user && user.uid) {
+        console.log("Fetching current user's resumes");
         try {
-          const userId = userDoc.id;
-          const userResumesRef = doc(db, "users", userId, "resumes", "data");
-          console.log(`Checking resumes for user ${userId}`);
-          const userResumesDoc = await getDoc(userResumesRef);
-          console.log(`User ${userId} resumes document exists:`, userResumesDoc.exists());
+          const userResumes = await apiClient.resumes.getUserResumes(user.uid) as Resume[];
           
-          if (userResumesDoc.exists() && userResumesDoc.data().resumes) {
-            const resumes = userResumesDoc.data().resumes;
-            console.log(`Found ${resumes.length} resumes for user ${userId}`);
-            allResumes = [...allResumes, ...resumes];
+          if (userResumes && userResumes.length > 0) {
+            console.log(`Found ${userResumes.length} resumes for current user`);
+            
+            const transformedResumes = userResumes.map((resume: Resume) => ({
+              filename: resume.filename,
+              analysis: resume.analysis || {
+                name: "Unknown",
+                email: "unknown@example.com",
+                key_skills: [],
+                education_details: [],
+                work_experience_details: []
+              },
+              userId: user.uid,
+              userEmail: user.email || "unknown@example.com"
+            }));
+            
+            allResumes = transformedResumes;
           }
-        } catch (error) {
-          console.warn(`Failed to fetch resumes for user ${userDoc.id}:`, error);
-          continue;
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error 
+            ? error.message 
+            : (error as ApiError)?.message || "Unknown error";
+          console.error("Error fetching user resumes:", errorMessage);
         }
       }
       
-      console.log(`Total resumes found from all users: ${allResumes.length}`);
-      
-      // If we found resumes, return them
-      if (allResumes.length > 0) {
-        return allResumes;
-      }
-      
-      // If no resumes found from any approach, return empty array
-      return [];
-    } catch (error) {
-      console.error("Error in fetchResumes:", error);
-      // Return empty array instead of throwing error
+      return allResumes;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : (error as ApiError)?.message || "Unknown error";
+      console.error("Error in fetchResumesFallback:", errorMessage);
       return [];
     }
-  }
+  }, [user]);
+
+  const fetchResumes = useCallback(async () => {
+    try {
+      const candidates = await apiClient.jobs.getCandidates(jobId) as Candidate[];
+      const existingCandidateFilenames = candidates.map(c => c.filename);
+      console.log(`Found ${existingCandidateFilenames.length} existing candidates for job`);
+      
+      let allResumes = [];
+      
+      try {
+        allResumes = await apiClient.resumes.getAllForMatching() as TransformedResume[];
+        if (allResumes && allResumes.length > 0) {
+          console.log(`Found ${allResumes.length} total resumes in the system`);
+        } else {
+          allResumes = await fetchResumesFallback();
+        }
+      } catch (error) {
+        console.error("Error fetching all resumes:", error);
+        allResumes = await fetchResumesFallback();
+      }
+      
+      const newResumes = allResumes.filter(resume => 
+        !existingCandidateFilenames.includes(resume.filename)
+      );
+      
+      console.log(`Found ${newResumes.length} new resumes that need analysis`);
+      
+      return {
+        resumes: newResumes,
+        isNew: newResumes.length > 0
+      };
+    } catch (error) {
+      console.error("Error in fetchResumes:", error);
+      return {
+        resumes: [],
+        isNew: false
+      };
+    }
+  }, [jobId, fetchResumesFallback]);
 
   useEffect(() => {
     const fetchJobDetails = async () => {
       try {
-        const jobDetailsRef = doc(db, "jobs", jobId, "data", "details")
-        const jobDetailsDoc = await getDoc(jobDetailsRef)
-
-        if (jobDetailsDoc.exists()) {
-          setJobDetails(jobDetailsDoc.data())
+        const jobData = await apiClient.jobs.getById(jobId) as JobDetails;
+        if (jobData) {
+          setJobDetails(jobData);
         }
       } catch (error) {
-        console.error("Error fetching job details:", error)
+        console.error("Error fetching job details:", error);
       }
     }
 
-    fetchJobDetails()
-  }, [jobId])
+    fetchJobDetails();
+  }, [jobId]);
 
-  useEffect(() => {
-    const analyzeCandidates = async () => {
-      if (!user) {
-        toast.error("Please sign in to view candidates")
-        return
+  const analyzeCandidates = useCallback(async () => {
+    if (!user) {
+      toast.error("Please sign in to view candidates")
+      return
+    }
+
+    setIsLoading(true)
+    setIsAnalyzing(true)
+
+    try {
+      const jobData = await apiClient.jobs.getById(jobId) as JobDetails;
+      
+      if (!jobData) {
+        toast.error("Job not found");
+        setIsLoading(false);
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      setJobDetails(jobData);
+      console.log("Job data retrieved:", jobData.title);
+      
+      const { resumes: resumesData, isNew } = await fetchResumes();
+      
+      if (resumesData.length === 0) {
+        toast.error("No resumes found. Please upload resumes to find matching candidates.");
+        setIsLoading(false);
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      if (!isNew && resumesData.length > 0) {
+        console.log("Using existing candidate analysis");
+        
+        const uniqueCandidates = filterDuplicateCandidates(resumesData as unknown as Candidate[]);
+        setDuplicatesRemoved(resumesData.length - uniqueCandidates.length);
+
+        const sortedCandidates = uniqueCandidates.sort((a, b) => 
+          b.matchAnalysis.matchPercentage - a.matchAnalysis.matchPercentage
+        );
+
+        setCandidates(sortedCandidates);
+        setIsAnalyzing(false);
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log(`Analyzing ${resumesData.length} resumes for matching candidates...`);
+      toast.info(`Analyzing ${resumesData.length} resumes for matching candidates...`);
+      
+      const analysisResults = await analyzeBatchMatches(jobData, resumesData);
+
+      if (!analysisResults || analysisResults.length === 0) {
+        toast.error("No matching candidates found");
+        console.log("No matching candidates found in analysis");
+        setIsLoading(false);
+        setIsAnalyzing(false);
+        return;
       }
 
-      setIsLoading(true)
-      setIsAnalyzing(true)
+      console.log(`Found ${analysisResults.length} potential matches`);
+      
+      const matchedCandidates = analysisResults
+        .filter((result) => result !== null)
+        .filter((result) => result.matchPercentage > 50)
+        .map((result) => {
+          const resumeData = resumesData.find((r) => r.filename === result.filename);
+          return {
+            filename: result.filename,
+            name: resumeData?.analysis?.name || "Unknown",
+            email: resumeData?.analysis?.email || "No email",
+            matchAnalysis: {
+              matchPercentage: result.matchPercentage,
+              matchingSkills: result.matchingSkills || [],
+              missingRequirements: result.missingRequirements || [],
+              experienceMatch: result.experienceMatch || false,
+              educationMatch: result.educationMatch || false,
+              overallAssessment: result.overallAssessment || "",
+            },
+            analysis: {
+              key_skills: resumeData?.analysis?.key_skills || [],
+              education_details: resumeData?.analysis?.education_details || [],
+              work_experience_details: resumeData?.analysis?.work_experience_details || [],
+            },
+            userId: resumeData?.userId,
+            userEmail: resumeData?.userEmail,
+          } as Candidate;
+        });
+
+      console.log(`${matchedCandidates.length} candidates matched with > 50% match rate`);
+      
+      let existingCandidates: Candidate[] = [];
+      if (isNew) {
+        try {
+          existingCandidates = await apiClient.jobs.getCandidates(jobId) as Candidate[];
+          console.log(`Retrieved ${existingCandidates.length} existing candidates from database`);
+        } catch (err) {
+          console.log("No existing candidates found or error retrieving them", err);
+        }
+      }
+      
+      const combinedCandidates = [...existingCandidates, ...matchedCandidates];
+      
+      const uniqueCandidates = filterDuplicateCandidates(combinedCandidates);
+      console.log(`${uniqueCandidates.length} unique candidates after removing duplicates`);
+
+      setDuplicatesRemoved(combinedCandidates.length - uniqueCandidates.length);
 
       try {
-        // First check for existing analyzed candidates
-        const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles");
-        const storedProfilesDoc = await getDoc(relevantProfilesRef);
-
-        if (storedProfilesDoc.exists() && storedProfilesDoc.data().candidates?.length > 0) {
-          console.log("Found existing candidates in relevant_profiles");
-          const data = storedProfilesDoc.data();
-
-          // Filter out duplicate candidates
-          const allCandidates = data.candidates
-          const uniqueCandidates = filterDuplicateCandidates(allCandidates)
-
-          // Track how many duplicates were removed
-          setDuplicatesRemoved(allCandidates.length - uniqueCandidates.length)
-
-          // Sort candidates by match percentage
-          const sortedCandidates = uniqueCandidates.sort((a: Candidate, b: Candidate) => {
-            return b.matchAnalysis.matchPercentage - a.matchAnalysis.matchPercentage
-          })
-
-          setCandidates(sortedCandidates)
-          setIsAnalyzing(false)
-          setIsLoading(false)
-          return
-        }
-
-        // If no candidates found, fetch job details and resumes
-        console.log("Performing new analysis");
-        const jobDetailsRef = doc(db, "jobs", jobId, "data", "details");
-        const jobDetailsDoc = await getDoc(jobDetailsRef);
+        await apiClient.jobs.saveCandidates(jobId, uniqueCandidates as unknown as Record<string, unknown>[]);
         
-        if (!jobDetailsDoc.exists()) {
-          toast.error("Job not found");
-          setIsLoading(false);
-          setIsAnalyzing(false);
-          return;
+        if (isNew) {
+          toast.success(`Found ${matchedCandidates.length} new matching candidates and saved to database`);
+        } else {
+          toast.success(`Updated ${uniqueCandidates.length} candidates in database`);
         }
-
-        const jobData = jobDetailsDoc.data();
-        console.log("Job data:", jobData);
+      } catch (saveError) {
+        console.error("Error saving candidates:", saveError);
         
-        // Fetch resumes from all users
-        const resumesData = await fetchResumes();
-        console.log(`Total resumes to analyze: ${resumesData.length}`);
-
-        if (resumesData.length === 0) {
-          // CHANGED: Don't create sample data, just show a message
-          toast.error("No resumes found in the system");
-          setIsLoading(false);
-          setIsAnalyzing(false);
-          return;
+        let errorMessage = "Failed to save analysis results";
+        if (saveError instanceof Error) {
+          errorMessage += `: ${saveError.message}`;
         }
-
-        // Analyze all fetched resumes against job requirements
-        toast.info(`Analyzing ${resumesData.length} resumes for matching candidates...`);
-        const analysisResults = await analyzeBatchMatches(jobData, resumesData);
-
-        if (!analysisResults || analysisResults.length === 0) {
-          toast.error("No matching candidates found");
-          console.log("No matching candidates found");
-          setIsLoading(false);
-          setIsAnalyzing(false);
-          return;
-        }
-
-        console.log(`Found ${analysisResults.length} potential matches`);
         
-        // Filter for candidates with > 50% match and map to Candidate structure
-        const matchedCandidates = analysisResults
-          .filter((result) => result.matchPercentage > 50)
-          .map((result) => {
-            const resumeData = resumesData.find((r: ResumeData) => r.filename === result.filename)
-            return {
-              filename: result.filename,
-              name: resumeData?.analysis.name || "Unknown",
-              email: resumeData?.analysis.email || "No email",
-              matchAnalysis: {
-                matchPercentage: result.matchPercentage,
-                matchingSkills: result.matchingSkills || [],
-                missingRequirements: result.missingRequirements || [],
-                experienceMatch: result.experienceMatch || false,
-                educationMatch: result.educationMatch || false,
-                overallAssessment: result.overallAssessment || "",
-              },
-              analysis: {
-                key_skills: resumeData?.analysis.key_skills || [],
-                education_details: resumeData?.analysis.education_details || [],
-                work_experience_details: resumeData?.analysis.work_experience_details || [],
-              },
-            } as Candidate
-          })
-
-        console.log(`${matchedCandidates.length} candidates matched with > 50% match rate`);
-        
-        // Filter out duplicate candidates
-        const uniqueCandidates = filterDuplicateCandidates(matchedCandidates)
-        console.log(`${uniqueCandidates.length} unique candidates after removing duplicates`);
-
-        // Track how many duplicates were removed
-        setDuplicatesRemoved(matchedCandidates.length - uniqueCandidates.length)
-
-        try {
-          // Update relevant_profiles collection
-          await setDoc(relevantProfilesRef, {
-            candidates: uniqueCandidates,
-            metadata: {
-              analyzed_at: new Date(),
-              analyzed_by: user.email,
-              total_candidates: uniqueCandidates.length,
-              total_resumes_analyzed: resumesData.length,
-              job_id: jobId,
-              lastUpdated: new Date()
-            }
-          });
-          
-          toast.success(`Found ${uniqueCandidates.length} matching candidates`);
-        } catch (error) {
-          console.error("Error saving candidates to Firestore:", error);
-          toast.error("Failed to save analysis results, but showing matches anyway");
-          // Continue with UI update even if saving fails
-        }
-
-        setCandidates(uniqueCandidates)
-      } catch (error) {
-        console.error("Error in analyzeCandidates:", error)
-        const errorMessage = error instanceof Error ? error.message : "Failed to analyze candidates"
-        toast.error(`Analysis failed: ${errorMessage}`)
-      } finally {
-        setIsLoading(false)
-        setIsAnalyzing(false)
+        toast.error(errorMessage, {
+          duration: 4000,
+          description: "Results are being shown but may not persist between sessions"
+        });
       }
-    }
 
-    analyzeCandidates()
-  }, [jobId, user])
-
-  const refreshCandidates = async () => {
-    try {
-      const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles")
-      const storedProfilesDoc = await getDoc(relevantProfilesRef)
-
-      if (storedProfilesDoc.exists()) {
-        const data = storedProfilesDoc.data()
-        if (data.candidates?.length > 0) {
-          // Filter out duplicate candidates
-          const allCandidates = data.candidates
-          const uniqueCandidates = filterDuplicateCandidates(allCandidates)
-
-          // Track how many duplicates were removed
-          setDuplicatesRemoved(allCandidates.length - uniqueCandidates.length)
-
-          setCandidates(uniqueCandidates)
-        }
-      }
+      setCandidates(uniqueCandidates);
+      
     } catch (error) {
-      console.error("Error refreshing candidates:", error)
-      toast.error("Failed to refresh candidates")
+      console.error("Error in analyzeCandidates:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to analyze candidates";
+      toast.error(`Analysis failed: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
+      setIsAnalyzing(false);
     }
-  }
+  }, [jobId, user, fetchResumes]);
 
-  const { currentView, setCurrentView, statusFilter, searchQuery, setSearchQuery } = useHiringStages()
+  const refreshCandidates = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      
+      console.log(`Refreshing candidates for job ${jobId}`);
+      
+      const candidatesData = await apiClient.jobs.getCandidates(jobId) as Candidate[];
+      
+      if (candidatesData && candidatesData.length > 0) {
+        console.log(`Retrieved ${candidatesData.length} candidates from API`);
+        
+        const uniqueCandidates = filterDuplicateCandidates(candidatesData);
+        console.log(`After duplicate filtering: ${uniqueCandidates.length} candidates`);
+        
+        const sortedCandidates = uniqueCandidates.sort(
+          (a, b) => b.matchAnalysis.matchPercentage - a.matchAnalysis.matchPercentage
+        );
+        
+        let filteredCandidates = sortedCandidates;
+        if (statusFilter !== 'all') {
+          filteredCandidates = sortedCandidates.filter(
+            (candidate) => candidate.tracking?.status === statusFilter
+          );
+        }
+        
+        setCandidates(filteredCandidates);
+        toast.success("Candidates refreshed");
+        return filteredCandidates;
+      } else {
+        console.warn("No candidates found for this job");
+        toast.error("No candidates found for this job");
+        return [];
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : (error as ApiError)?.message || "Unknown error";
+      console.error("Error refreshing candidates:", errorMessage);
+      toast.error(`Failed to refresh candidates: ${errorMessage}`);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [jobId, statusFilter]);
 
   useEffect(() => {
-    if (!jobId) return
+    analyzeCandidates();
+  }, [analyzeCandidates]);
 
-    const relevantProfilesRef = doc(db, "jobs", jobId, "relevant_profiles", "profiles")
-
-    const unsubscribe = onSnapshot(
-      relevantProfilesRef,
-      (doc) => {
-        if (doc.exists()) {
-          const data = doc.data()
-          if (data.candidates) {
-            // Filter by status if needed
-            const statusFilteredCandidates =
-              statusFilter === "all"
-                ? data.candidates
-                : data.candidates.filter((c: Candidate) => c.tracking?.status === statusFilter)
-
-            // Filter out duplicate candidates
-            const uniqueCandidates = filterDuplicateCandidates(statusFilteredCandidates)
-
-            // Track how many duplicates were removed
-            setDuplicatesRemoved(statusFilteredCandidates.length - uniqueCandidates.length)
-
-            setCandidates(uniqueCandidates)
-          }
+  useEffect(() => {
+    const initializeTracking = async () => {
+      if (candidates.length > 0 && jobId) {
+        try {
+          await refreshCandidates();
+        } catch (error) {
+          console.error("Error initializing candidate tracking:", error);
         }
-      },
-      (error) => {
-        console.error("Error in real-time updates:", error)
-        toast.error("Failed to get real-time updates")
-      },
-    )
+      }
+    };
 
-    return () => unsubscribe()
-  }, [jobId, statusFilter])
+    initializeTracking();
+  }, [candidates.length, jobId, refreshCandidates]);
 
-  // Reset to first page when filters change
+  useEffect(() => {
+    if (candidates.length > 0) {
+      refreshCandidates();
+    }
+  }, [candidates.length, jobId, refreshCandidates]);
+
   useEffect(() => {
     setCurrentPage(1)
   }, [statusFilter, searchQuery, sortBy, sortOrder])
 
-  // Filter and sort candidates
   const filteredAndSortedCandidates = useMemo(() => {
-    // First filter by search query
     const filtered = candidates.filter((candidate) => {
       if (!searchQuery) return true
 
@@ -469,7 +537,6 @@ export default function CandidatesPage() {
       )
     })
 
-    // Then sort
     return [...filtered].sort((a, b) => {
       let comparison = 0
 
@@ -491,16 +558,13 @@ export default function CandidatesPage() {
     })
   }, [candidates, searchQuery, sortBy, sortOrder])
 
-  // Paginate candidates
   const paginatedCandidates = useMemo(() => {
     const startIndex = (currentPage - 1) * CANDIDATES_PER_PAGE
     return filteredAndSortedCandidates.slice(startIndex, startIndex + CANDIDATES_PER_PAGE)
   }, [filteredAndSortedCandidates, currentPage])
 
-  // Calculate total pages
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedCandidates.length / CANDIDATES_PER_PAGE))
 
-  // Loading skeleton for candidate cards
   const CandidateCardSkeleton = () => (
     <div className="p-6 rounded-lg border animate-pulse">
       <div className="flex justify-between items-start">
@@ -525,7 +589,6 @@ export default function CandidatesPage() {
     </div>
   )
 
-  // Empty state component
   const EmptyState = () => (
     <div className="text-center py-16 px-4">
       <div className="bg-muted/30 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
@@ -544,7 +607,6 @@ export default function CandidatesPage() {
     </div>
   )
 
-  // Candidate card component for list view
   const CandidateCard = ({ candidate }: { candidate: Candidate }) => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -662,7 +724,6 @@ export default function CandidatesPage() {
     </motion.div>
   )
 
-  // Toggle sort order
   const toggleSort = (type: "match" | "name" | "date") => {
     if (sortBy === type) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc")
@@ -671,6 +732,20 @@ export default function CandidatesPage() {
       setSortOrder("desc")
     }
   }
+
+  useEffect(() => {
+    const updateCandidatesOnStatusChange = async () => {
+      if (candidates.length === 0 || !jobId) return;
+      
+      try {
+        await refreshCandidates();
+      } catch (error) {
+        console.error("Error refreshing candidates on status change:", error);
+      }
+    };
+
+    updateCandidatesOnStatusChange();
+  }, [statusFilter, candidates.length, jobId, refreshCandidates]);
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
@@ -835,6 +910,48 @@ export default function CandidatesPage() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button 
+                    size="sm" 
+                    onClick={async () => {
+                      setIsLoading(true);
+                      try {
+                        const newResumeCheck = await apiClient.jobs.checkForNewResumes(jobId) as {
+                          hasNewResumes: boolean;
+                          newResumeCount: number;
+                        };
+                        
+                        if (newResumeCheck.hasNewResumes) {
+                          toast.info(`Found ${newResumeCheck.newResumeCount} new resumes to analyze`);
+                          await analyzeCandidates();
+                        } else {
+                          toast.success("All resumes have been analyzed. You're up to date!");
+                          await refreshCandidates();
+                        }
+                      } catch (error) {
+                        console.error("Error checking for new resumes:", error);
+                        toast.error("Failed to check for new resumes");
+                        await refreshCandidates();
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    disabled={isLoading || isAnalyzing}
+                  >
+                    {isLoading || isAnalyzing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Checking...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Check for New Resumes
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -877,12 +994,10 @@ export default function CandidatesPage() {
                 )}
               </AnimatePresence>
 
-              {/* Pagination */}
               {filteredAndSortedCandidates.length > CANDIDATES_PER_PAGE && (
                 <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
               )}
 
-              {/* Results summary */}
               <div className="text-center text-sm text-muted-foreground mt-4">
                 Showing {paginatedCandidates.length} of {filteredAndSortedCandidates.length} candidates
                 {duplicatesRemoved > 0 && ` (${duplicatesRemoved} duplicates filtered out)`}

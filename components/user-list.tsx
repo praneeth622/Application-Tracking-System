@@ -1,8 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { collection, getDocs, doc, getDoc, updateDoc } from "firebase/firestore"
-import { db } from "@/FirebaseConfig"
 import {
   Table,
   TableBody,
@@ -18,15 +16,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
+import apiClient from "@/lib/api-client"
 
 interface User {
   uid: string
   email: string
   role: 'admin' | 'user'
   name: string
-  createdAt: Date
-  updatedAt: Date
+  created_at: string
+  updated_at: string
 }
 
 export function UserList() {
@@ -39,30 +38,11 @@ export function UserList() {
 
   const fetchUsers = async () => {
     try {
-      const users: User[] = []
-      const querySnapshot = await getDocs(collection(db, "users"))
-      
-      for (const docSnapshot of querySnapshot.docs) {
-        const userProfileRef = doc(db, "users", docSnapshot.id, "userProfile", "data")
-        const userProfileDoc = await getDoc(userProfileRef)
-        
-        if (userProfileDoc.exists()) {
-          const userData = userProfileDoc.data()
-          users.push({
-            ...userData,
-            uid: docSnapshot.id, // Override the uid after spreading userData
-          } as User)
-        }
-      }
-      
-      setUsers(users)
+      const fetchedUsers = await apiClient.auth.getAllUsers();
+      setUsers(fetchedUsers as User[]);
     } catch (error) {
       console.error("Error fetching users:", error)
-      toast({
-        title: "Error",
-        description: "Failed to fetch users",
-        variant: "destructive",
-      })
+      toast.error("Failed to fetch users")
     } finally {
       setLoading(false)
     }
@@ -70,26 +50,19 @@ export function UserList() {
 
   const updateUserRole = async (userId: string, newRole: 'admin' | 'user') => {
     try {
-      const userRef = doc(db, "users", userId, "userProfile", "data")
-      await updateDoc(userRef, {
+      await apiClient.auth.updateUserRole({
+        uid: userId, 
         role: newRole
-      })
+      });
       
       setUsers(users.map(user => 
         user.uid === userId ? { ...user, role: newRole } : user
-      ))
+      ));
       
-      toast({
-        title: "Success",
-        description: "User role updated successfully",
-      })
+      toast.success("User role updated successfully");
     } catch (error) {
       console.error("Error updating user role:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update user role",
-        variant: "destructive",
-      })
+      toast.error("Failed to update user role")
     }
   }
 
@@ -111,7 +84,7 @@ export function UserList() {
         <TableBody>
           {users.map((user) => (
             <TableRow key={user.uid}>
-              <TableCell>{user.name}</TableCell>
+              <TableCell>{user.name || 'No name'}</TableCell>
               <TableCell>{user.email}</TableCell>
               <TableCell>{user.role}</TableCell>
               <TableCell>

@@ -1,10 +1,8 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeft, Briefcase, MapPin, DollarSign, Clock, Calendar, CheckCircle } from "lucide-react"
+import { ArrowLeft, Briefcase, MapPin, DollarSign, Clock, Calendar,  } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAuth } from "@/context/auth-context"
@@ -14,15 +12,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/use-toast"
-import { Timestamp, doc, writeBatch } from "firebase/firestore"
-import { db } from "@/FirebaseConfig" // Adjust the path to your Firebase configuration file
-import { v4 as uuidv4 } from "uuid"
 import { SkillInput } from "@/components/skill-input"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import apiClient from "@/lib/api-client"
 
 interface JobFormData {
   title: string
@@ -32,12 +28,8 @@ interface JobFormData {
   experience_required: string
   salary_range: string
   description: string
-  requirements: string[]
-  benefits: string[]
   working_hours: string
   mode_of_work: string
-  key_responsibilities: string[]
-  nice_to_have_skills: string[]
   about_company: string
   deadline: string
 }
@@ -50,6 +42,11 @@ export default function CreateJobPage() {
   const [activeTab, setActiveTab] = useState("basic")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [] = useState<string[]>([])
+  const [requirements, setRequirements] = useState<string[]>([])
+  const [benefits, setBenefits] = useState<string[]>([])
+  const [skillsRequired, setSkillsRequired] = useState<string[]>([])
+  const [niceToHaveSkills, setNiceToHaveSkills] = useState<string[]>([])
 
   const [formData, setFormData] = useState<JobFormData>({
     title: "",
@@ -59,17 +56,11 @@ export default function CreateJobPage() {
     experience_required: "",
     salary_range: "",
     description: "",
-    requirements: [],
-    benefits: [],
     working_hours: "",
     mode_of_work: "",
-    key_responsibilities: [],
-    nice_to_have_skills: [],
     about_company: "",
     deadline: "",
   })
-
-  const [skills, setSkills] = useState<string[]>([])
 
   const validateForm = () => {
     const errors: Record<string, string> = {}
@@ -87,30 +78,27 @@ export default function CreateJobPage() {
     if (!formData.deadline) errors.deadline = "Application deadline is required"
 
     // Requirements validation
-    if (formData.requirements.length === 0 || (formData.requirements.length === 1 && !formData.requirements[0])) {
+    if (requirements.length === 0) {
       errors.requirements = "At least one requirement is required"
     }
 
     // Benefits validation
-    if (formData.benefits.length === 0 || (formData.benefits.length === 1 && !formData.benefits[0])) {
+    if (benefits.length === 0) {
       errors.benefits = "At least one benefit is required"
     }
 
     // Skills validation
-    if (skills.length === 0) {
+    if (skillsRequired.length === 0) {
       errors.skills = "At least one required skill is required"
-    }
-
-    // Responsibilities validation
-    if (
-      formData.key_responsibilities.length === 0 ||
-      (formData.key_responsibilities.length === 1 && !formData.key_responsibilities[0])
-    ) {
-      errors.key_responsibilities = "At least one responsibility is required"
     }
 
     setFormErrors(errors)
     return Object.keys(errors).length === 0
+  }
+
+  const handleRequirementChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setRequirements(value ? value.split("\n") : [])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -137,7 +125,7 @@ export default function CreateJobPage() {
       ) {
         setActiveTab("requirements")
       } else if (
-        Object.keys(formErrors).some((key) => ["key_responsibilities", "working_hours", "mode_of_work"].includes(key))
+        Object.keys(formErrors).some((key) => ["working_hours", "mode_of_work"].includes(key))
       ) {
         setActiveTab("details")
       } else if (Object.keys(formErrors).some((key) => ["benefits", "about_company", "deadline"].includes(key))) {
@@ -157,33 +145,8 @@ export default function CreateJobPage() {
     try {
       if (!user) throw new Error("User not authenticated")
 
-      // Generate a unique job ID
-      const jobId = `job_${uuidv4()}`
-
-      // Convert text areas with multiple lines to arrays
-      const requirementsArray =
-        typeof formData.requirements === "string"
-          ? formData.requirements.split("\n").filter(Boolean)
-          : formData.requirements.filter(Boolean)
-
-      const benefitsArray =
-        typeof formData.benefits === "string"
-          ? formData.benefits.split("\n").filter(Boolean)
-          : formData.benefits.filter(Boolean)
-
-      const responsibilitiesArray =
-        typeof formData.key_responsibilities === "string"
-          ? formData.key_responsibilities.split("\n").filter(Boolean)
-          : formData.key_responsibilities.filter(Boolean)
-
-      const niceToHaveArray =
-        typeof formData.nice_to_have_skills === "string"
-          ? formData.nice_to_have_skills.split("\n").filter(Boolean)
-          : formData.nice_to_have_skills.filter(Boolean)
-
       // Create job data object
       const jobData = {
-        job_id: jobId,
         title: formData.title,
         company: formData.company,
         location: formData.location,
@@ -196,49 +159,25 @@ export default function CreateJobPage() {
         shortlisted: 0,
         rejected: 0,
         in_progress: 0,
-        benefits: benefitsArray,
-        requirements: requirementsArray,
-        skills_required: skills,
+        benefits,
+        requirements,
+        skills_required: skillsRequired,
+        nice_to_have_skills: niceToHaveSkills,
         working_hours: formData.working_hours,
         mode_of_work: formData.mode_of_work,
-        key_responsibilities: responsibilitiesArray,
-        nice_to_have_skills: niceToHaveArray,
         about_company: formData.about_company,
         deadline: formData.deadline,
-        created_at: Timestamp.now(),
-        updated_at: Timestamp.now(),
-        hr_id: user.uid,
+        created_at: new Date(),
+        updated_at: new Date(),
         metadata: {
-          created_by: user.email || "",
-          last_modified_by: user.email || "",
+          created_by: user?.email || "",
+          created_by_id: user?.uid || "",
+          last_modified_by: user?.email || "",
         },
       }
 
-      // Create the nested structure
-      const jobRef = doc(db, "jobs", jobId)
-      const jobDetailsRef = doc(db, "jobs", jobId, "data", "details")
-      const jobResumesRef = doc(db, "jobs", jobId, "resumes", "details")
-
-      // Create a batch to ensure all writes succeed or fail together
-      const batch = writeBatch(db)
-
-      // Add the job document
-      batch.set(jobRef, {
-        created_at: Timestamp.now(),
-        hr_id: user.uid,
-      })
-
-      // Add job details
-      batch.set(jobDetailsRef, jobData)
-
-      // Initialize resumes collection
-      batch.set(jobResumesRef, {
-        resumes: [],
-        updated_at: Timestamp.now(),
-      })
-
-      // Commit the batch
-      await batch.commit()
+      // Use API client to create the job
+      await apiClient.jobs.create(jobData);
 
       toast({
         title: "Success",
@@ -250,7 +189,7 @@ export default function CreateJobPage() {
       console.error("Error creating job:", error)
       toast({
         title: "Error",
-        description: "Failed to post job",
+        description: "Failed to create job. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -260,17 +199,6 @@ export default function CreateJobPage() {
 
   const handleInputChange = (field: keyof JobFormData, value: string) => {
     setFormData({ ...formData, [field]: value })
-    // Clear error for this field if it exists
-    if (formErrors[field]) {
-      const newErrors = { ...formErrors }
-      delete newErrors[field]
-      setFormErrors(newErrors)
-    }
-  }
-
-  const handleTextAreaChange = (field: keyof JobFormData, value: string) => {
-    const arrayValue = value.split("\n")
-    setFormData({ ...formData, [field]: arrayValue })
     // Clear error for this field if it exists
     if (formErrors[field]) {
       const newErrors = { ...formErrors }
@@ -289,12 +217,11 @@ export default function CreateJobPage() {
       formData.experience_required,
       formData.salary_range,
       formData.description,
-      formData.requirements.length > 0 && formData.requirements[0] !== "",
-      formData.benefits.length > 0 && formData.benefits[0] !== "",
+      requirements.length > 0,
+      benefits.length > 0,
       formData.working_hours,
       formData.mode_of_work,
-      formData.key_responsibilities.length > 0 && formData.key_responsibilities[0] !== "",
-      skills.length > 0,
+      skillsRequired.length > 0,
       formData.deadline,
     ].filter(Boolean).length
 
@@ -342,7 +269,6 @@ export default function CreateJobPage() {
                     <div
                       className="absolute inset-0 rounded-full border-4 border-primary"
                       style={{
-                        clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%)`,
                         clipPath: `path('M 50 0 A 50 50 0 ${getCompletionPercentage() >= 50 ? 1 : 0} 1 ${50 + 50 * Math.cos((2 * Math.PI * getCompletionPercentage()) / 100)} ${50 + 50 * Math.sin((2 * Math.PI * getCompletionPercentage()) / 100)} L 50 50 Z')`,
                       }}
                     ></div>
@@ -379,7 +305,7 @@ export default function CreateJobPage() {
                 <TabsTrigger value="details" className="relative">
                   Job Details
                   {Object.keys(formErrors).some((key) =>
-                    ["key_responsibilities", "working_hours", "mode_of_work"].includes(key),
+                    ["working_hours", "mode_of_work"].includes(key),
                   ) && <span className="absolute top-0 right-1 w-2 h-2 bg-destructive rounded-full"></span>}
                 </TabsTrigger>
                 <TabsTrigger value="additional" className="relative">
@@ -509,9 +435,7 @@ export default function CreateJobPage() {
                             className={`pl-9 ${formErrors.salary_range ? "border-destructive" : ""}`}
                           />
                         </div>
-                        {formErrors.salary_range && (
-                          <p className="text-sm text-destructive">{formErrors.salary_range}</p>
-                        )}
+                        {formErrors.salary_range && <p className="text-sm text-destructive">{formErrors.salary_range}</p>}
                       </div>
                     </div>
 
@@ -523,77 +447,54 @@ export default function CreateJobPage() {
                         id="description"
                         value={formData.description}
                         onChange={(e) => handleInputChange("description", e.target.value)}
-                        placeholder="Enter detailed job description"
-                        className={`min-h-32 ${formErrors.description ? "border-destructive" : ""}`}
+                        placeholder="Provide a detailed description of the job role"
+                        className={formErrors.description ? "border-destructive" : ""}
                       />
                       {formErrors.description && <p className="text-sm text-destructive">{formErrors.description}</p>}
                     </div>
                   </CardContent>
-                  <CardFooter className="flex justify-end">
-                    <Button type="button" onClick={() => setActiveTab("requirements")}>
-                      Continue to Requirements
-                    </Button>
-                  </CardFooter>
                 </Card>
               </TabsContent>
 
               <TabsContent value="requirements" className="space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-xl">Requirements & Skills</CardTitle>
-                    <CardDescription>Define the qualifications and skills needed for this position</CardDescription>
+                    <CardTitle className="text-xl">Requirements</CardTitle>
+                    <CardDescription>Specify the requirements and skills needed for the job</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="space-y-2">
                       <Label htmlFor="requirements" className={formErrors.requirements ? "text-destructive" : ""}>
-                        Required Qualifications <span className="text-destructive">*</span>
+                        Job Requirements <span className="text-destructive">*</span>
                       </Label>
                       <Textarea
                         id="requirements"
-                        value={formData.requirements.join("\n")}
-                        onChange={(e) => handleTextAreaChange("requirements", e.target.value)}
-                        placeholder="Enter each requirement on a new line"
-                        className={`min-h-32 ${formErrors.requirements ? "border-destructive" : ""}`}
+                        value={requirements.join("\n")}
+                        onChange={handleRequirementChange}
+                        placeholder="List the job requirements, one per line"
+                        className={formErrors.requirements ? "border-destructive" : ""}
                       />
                       {formErrors.requirements && <p className="text-sm text-destructive">{formErrors.requirements}</p>}
-                      <p className="text-sm text-muted-foreground">Enter each requirement on a new line</p>
                     </div>
 
                     <div className="space-y-2">
-                      <Label className={formErrors.skills ? "text-destructive" : ""}>
+                      <Label htmlFor="skills" className={formErrors.skills ? "text-destructive" : ""}>
                         Required Skills <span className="text-destructive">*</span>
                       </Label>
-                      <SkillInput
-                        skills={skills}
-                        setSkills={setSkills}
-                        className={formErrors.skills ? "border-destructive" : ""}
-                      />
+                      <SkillInput skills={skillsRequired} setSkills={setSkillsRequired} />
                       {formErrors.skills && <p className="text-sm text-destructive">{formErrors.skills}</p>}
-                      <p className="text-sm text-muted-foreground">Press Enter or comma to add a skill</p>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="nice_to_have_skills">
-                        Nice-to-Have Skills <span className="text-muted-foreground">(Optional)</span>
-                      </Label>
+                      <Label htmlFor="nice_to_have_skills">Nice-to-Have Skills</Label>
                       <Textarea
                         id="nice_to_have_skills"
-                        value={formData.nice_to_have_skills.join("\n")}
-                        onChange={(e) => handleTextAreaChange("nice_to_have_skills", e.target.value)}
-                        placeholder="Enter each nice-to-have skill on a new line"
-                        className="min-h-24"
+                        value={niceToHaveSkills.join("\n")}
+                        onChange={(e) => setNiceToHaveSkills(e.target.value.split("\n"))}
+                        placeholder="List any additional skills that are nice to have, one per line"
                       />
-                      <p className="text-sm text-muted-foreground">Enter each skill on a new line</p>
                     </div>
                   </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button type="button" variant="outline" onClick={() => setActiveTab("basic")}>
-                      Back
-                    </Button>
-                    <Button type="button" onClick={() => setActiveTab("details")}>
-                      Continue to Job Details
-                    </Button>
-                  </CardFooter>
                 </Card>
               </TabsContent>
 
@@ -601,85 +502,49 @@ export default function CreateJobPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-xl">Job Details</CardTitle>
-                    <CardDescription>
-                      Provide specific details about the job responsibilities and working conditions
-                    </CardDescription>
+                    <CardDescription>Provide additional details about the job role</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="space-y-2">
-                      <Label
-                        htmlFor="key_responsibilities"
-                        className={formErrors.key_responsibilities ? "text-destructive" : ""}
-                      >
-                        Key Responsibilities <span className="text-destructive">*</span>
+                      <Label htmlFor="working_hours" className={formErrors.working_hours ? "text-destructive" : ""}>
+                        Working Hours <span className="text-destructive">*</span>
                       </Label>
-                      <Textarea
-                        id="key_responsibilities"
-                        value={formData.key_responsibilities.join("\n")}
-                        onChange={(e) => handleTextAreaChange("key_responsibilities", e.target.value)}
-                        placeholder="Enter each responsibility on a new line"
-                        className={`min-h-32 ${formErrors.key_responsibilities ? "border-destructive" : ""}`}
-                      />
-                      {formErrors.key_responsibilities && (
-                        <p className="text-sm text-destructive">{formErrors.key_responsibilities}</p>
-                      )}
-                      <p className="text-sm text-muted-foreground">Enter each responsibility on a new line</p>
+                      <div className="relative">
+                        <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                        <Input
+                          id="working_hours"
+                          value={formData.working_hours}
+                          onChange={(e) => handleInputChange("working_hours", e.target.value)}
+                          placeholder="e.g. 9 AM - 5 PM"
+                          className={`pl-9 ${formErrors.working_hours ? "border-destructive" : ""}`}
+                        />
+                      </div>
+                      {formErrors.working_hours && <p className="text-sm text-destructive">{formErrors.working_hours}</p>}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="working_hours" className={formErrors.working_hours ? "text-destructive" : ""}>
-                          Working Hours <span className="text-destructive">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                          <Input
-                            id="working_hours"
-                            value={formData.working_hours}
-                            onChange={(e) => handleInputChange("working_hours", e.target.value)}
-                            placeholder="e.g. 40 hours/week"
-                            className={`pl-9 ${formErrors.working_hours ? "border-destructive" : ""}`}
-                          />
-                        </div>
-                        {formErrors.working_hours && (
-                          <p className="text-sm text-destructive">{formErrors.working_hours}</p>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="mode_of_work" className={formErrors.mode_of_work ? "text-destructive" : ""}>
-                          Mode of Work <span className="text-destructive">*</span>
-                        </Label>
-                        <Select
-                          value={formData.mode_of_work}
-                          onValueChange={(value) => handleInputChange("mode_of_work", value)}
+                    <div className="space-y-2">
+                      <Label htmlFor="mode_of_work" className={formErrors.mode_of_work ? "text-destructive" : ""}>
+                        Mode of Work <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={formData.mode_of_work}
+                        onValueChange={(value) => handleInputChange("mode_of_work", value)}
+                      >
+                        <SelectTrigger
+                          id="mode_of_work"
+                          className={formErrors.mode_of_work ? "border-destructive" : ""}
                         >
-                          <SelectTrigger
-                            id="mode_of_work"
-                            className={formErrors.mode_of_work ? "border-destructive" : ""}
-                          >
-                            <SelectValue placeholder="Select mode of work" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="remote">Remote</SelectItem>
-                            <SelectItem value="in-office">In-office</SelectItem>
-                            <SelectItem value="hybrid">Hybrid</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {formErrors.mode_of_work && (
-                          <p className="text-sm text-destructive">{formErrors.mode_of_work}</p>
-                        )}
-                      </div>
+                          <SelectValue placeholder="Select mode of work" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="onsite">Onsite</SelectItem>
+                          <SelectItem value="remote">Remote</SelectItem>
+                          <SelectItem value="hybrid">Hybrid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {formErrors.mode_of_work && <p className="text-sm text-destructive">{formErrors.mode_of_work}</p>}
                     </div>
                   </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button type="button" variant="outline" onClick={() => setActiveTab("requirements")}>
-                      Back
-                    </Button>
-                    <Button type="button" onClick={() => setActiveTab("additional")}>
-                      Continue to Additional Info
-                    </Button>
-                  </CardFooter>
                 </Card>
               </TabsContent>
 
@@ -687,34 +552,30 @@ export default function CreateJobPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-xl">Additional Information</CardTitle>
-                    <CardDescription>Add final details about the company and application process</CardDescription>
+                    <CardDescription>Provide any additional information about the job</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="space-y-2">
                       <Label htmlFor="benefits" className={formErrors.benefits ? "text-destructive" : ""}>
-                        Benefits Offered <span className="text-destructive">*</span>
+                        Benefits <span className="text-destructive">*</span>
                       </Label>
                       <Textarea
                         id="benefits"
-                        value={formData.benefits.join("\n")}
-                        onChange={(e) => handleTextAreaChange("benefits", e.target.value)}
-                        placeholder="Enter each benefit on a new line"
-                        className={`min-h-32 ${formErrors.benefits ? "border-destructive" : ""}`}
+                        value={benefits.join("\n")}
+                        onChange={(e) => setBenefits(e.target.value.split("\n"))}
+                        placeholder="List the benefits, one per line"
+                        className={formErrors.benefits ? "border-destructive" : ""}
                       />
                       {formErrors.benefits && <p className="text-sm text-destructive">{formErrors.benefits}</p>}
-                      <p className="text-sm text-muted-foreground">Enter each benefit on a new line</p>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="about_company">
-                        About the Company <span className="text-muted-foreground">(Optional)</span>
-                      </Label>
+                      <Label htmlFor="about_company">About the Company</Label>
                       <Textarea
                         id="about_company"
                         value={formData.about_company}
                         onChange={(e) => handleInputChange("about_company", e.target.value)}
-                        placeholder="Enter information about the company"
-                        className="min-h-24"
+                        placeholder="Provide a brief description about the company"
                       />
                     </div>
 
@@ -735,43 +596,27 @@ export default function CreateJobPage() {
                       {formErrors.deadline && <p className="text-sm text-destructive">{formErrors.deadline}</p>}
                     </div>
                   </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button type="button" variant="outline" onClick={() => setActiveTab("details")}>
-                      Back
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="bg-gradient-to-r from-primary to-primary/80"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                          Posting Job...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Post Job
-                        </>
-                      )}
-                    </Button>
-                  </CardFooter>
                 </Card>
-
-                {Object.keys(formErrors).length > 0 && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Validation Error</AlertTitle>
-                    <AlertDescription>Please fill in all required fields before submitting the form.</AlertDescription>
-                  </Alert>
-                )}
               </TabsContent>
             </Tabs>
+
+            {Object.keys(formErrors).length > 0 && (
+              <Alert variant="destructive" className="mt-6">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Validation Error</AlertTitle>
+                <AlertDescription>Please fill in all required fields</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex justify-end mt-6">
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <span className="mr-2">Submitting...</span>}
+                Post Job
+              </Button>
+            </div>
           </form>
         </div>
       </motion.div>
     </div>
   )
 }
-
