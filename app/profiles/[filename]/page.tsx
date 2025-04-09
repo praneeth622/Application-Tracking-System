@@ -3,9 +3,6 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
-import { db, storage } from "@/FirebaseConfig"
-import { doc, getDoc, type Timestamp } from "firebase/firestore"
-import { ref, getDownloadURL } from "firebase/storage"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { motion } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -17,6 +14,7 @@ import { ExperienceSection } from "@/components/profiles/experience-section"
 import { SkillsSection } from "@/components/profiles/skills-section"
 import { CompanyFeedback } from "@/components/profile/company-feedback"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import apiClient from "@/lib/api-client"
 
 interface Analysis {
   name: string
@@ -41,13 +39,19 @@ interface Analysis {
 }
 
 interface Profile {
+  _id: string
   filename: string
   filelink: string
-  uploadedAt: Timestamp
+  uploaded_at: string
+  created_at?: string
   aiAnalysis?: string
   analysis?: Analysis
   profile_summary?: string
   companyFeedback?: string[]
+  uploadedAt: {
+    seconds: number
+    nanoseconds: number
+  }
 }
 
 export default function ProfilePage() {
@@ -64,29 +68,45 @@ export default function ProfilePage() {
       if (!user || !params.filename) return
 
       try {
-        const userDocRef = doc(db, "users", user.uid, "resumes", "data")
-        const userDoc = await getDoc(userDocRef)
-
-        if (userDoc.exists()) {
-          const userData = userDoc.data()
-          const foundProfile = userData.resumes?.find(
-            (r: Profile) => r.filename === decodeURIComponent(params.filename as string),
-          )
-
-          if (foundProfile) {
-            const profileData: Profile = {
-              ...foundProfile,
-              profile_summary: foundProfile.analysis?.profile_summary || null,
-            }
-            setProfile(profileData)
-          } else {
-            toast({
-              title: "Profile not found",
-              description: "The requested profile could not be found",
-              variant: "destructive",
-            })
-            router.push("/profiles")
+        // Fetch the specific resume by ID using the API client
+        const resumeData = await apiClient.resumes.getResume(params.filename as string) as any;
+        
+        if (resumeData) {
+          // Convert timestamp or ISO string to a format compatible with ProfileHeader
+          const uploadTimestamp = resumeData.uploaded_at || resumeData.created_at || new Date().toISOString();
+          let timestampSeconds = 0;
+          
+          // If it's a string date, convert to timestamp
+          if (typeof uploadTimestamp === 'string') {
+            timestampSeconds = Math.floor(new Date(uploadTimestamp).getTime() / 1000);
+          } else if (uploadTimestamp.seconds) {
+            // If it already has seconds property, use it directly
+            timestampSeconds = uploadTimestamp.seconds;
           }
+          
+          const profileData: Profile = {
+            _id: resumeData._id || '',
+            filename: resumeData.filename || '',
+            filelink: resumeData.filelink || '',
+            uploaded_at: resumeData.uploaded_at || resumeData.created_at || new Date().toISOString(),
+            aiAnalysis: resumeData.aiAnalysis,
+            analysis: resumeData.analysis,
+            profile_summary: resumeData.analysis?.profile_summary || null,
+            companyFeedback: resumeData.companyFeedback,
+            // Add uploadedAt property in the format expected by ProfileHeader
+            uploadedAt: {
+              seconds: timestampSeconds,
+              nanoseconds: 0
+            }
+          }
+          setProfile(profileData)
+        } else {
+          toast({
+            title: "Profile not found",
+            description: "The requested profile could not be found",
+            variant: "destructive",
+          })
+          router.push("/profiles")
         }
       } catch (error) {
         console.error("Error fetching profile:", error)
@@ -104,7 +124,7 @@ export default function ProfilePage() {
   }, [user, params.filename, router])
 
   const handleViewResume = async () => {
-    if (!profile?.filelink) {
+    if (!profile?._id) {
       toast({
         title: "Error",
         description: "Resume file not found",
@@ -114,24 +134,46 @@ export default function ProfilePage() {
     }
 
     try {
-      // Get the download URL from Firebase Storage
-      const fileRef = ref(storage, profile.filelink)
-      const url = await getDownloadURL(fileRef)
+      // First, try to get the file content directly through our API client with auth
+      try {
+        const response = await apiClient.resumes.getResumeContent(profile._id);
+        
+        // Create a blob URL from the response and open it
+        if (response && response.data) {
+          const blob = new Blob([response.data], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          return;
+        }
+      } catch (apiError) {
+        console.error("Error fetching resume content through API:", apiError);
+        // Fall through to alternative methods
+      }
 
-      // Open the PDF in a new tab
-      window.open(url, "_blank")
+      // If the direct API method failed, try to use the file link
+      if (profile.filelink) {
+        // If filelink is a storage URL, we need to fetch it with authentication
+        window.open(profile.filelink, "_blank");
+        return;
+      }
+
+      toast({
+        title: "Error",
+        description: "Could not view resume. Try downloading instead.",
+        variant: "destructive",
+      });
     } catch (error) {
       console.error("Error viewing resume:", error)
       toast({
         title: "Error",
-        description: "Failed to open resume",
+        description: "Failed to open resume. Please try downloading instead.",
         variant: "destructive",
       })
     }
   }
 
   const handleDownloadResume = async () => {
-    if (!profile?.filelink) {
+    if (!profile?._id) {
       toast({
         title: "Error",
         description: "Resume file not found",
@@ -141,22 +183,58 @@ export default function ProfilePage() {
     }
 
     try {
-      // Get the download URL from Firebase Storage
-      const fileRef = ref(storage, profile.filelink)
-      const url = await getDownloadURL(fileRef)
+      // Try to get the file through the API client first
+      try {
+        const response = await apiClient.resumes.downloadResume(profile._id);
+        
+        if (response && response.data) {
+          // Create a blob from the response data
+          const blob = new Blob([response.data], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          
+          // Create a temporary anchor element to trigger download
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = profile.filename || "resume.pdf";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          
+          // Clean up the blob URL
+          setTimeout(() => URL.revokeObjectURL(url), 100);
+          
+          toast({
+            title: "Success",
+            description: "Resume download started",
+          });
+          return;
+        }
+      } catch (apiError) {
+        console.error("Error downloading through API:", apiError);
+        // Fall through to alternative methods
+      }
 
-      // Create a temporary anchor element to trigger download
-      const a = document.createElement("a")
-      a.href = url
-      a.download = profile.filename || "resume.pdf"
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      // If API download fails, try to use the filelink directly
+      if (profile.filelink) {
+        const a = document.createElement("a");
+        a.href = profile.filelink;
+        a.download = profile.filename || "resume.pdf";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        toast({
+          title: "Success",
+          description: "Resume download started",
+        });
+        return;
+      }
 
       toast({
-        title: "Success",
-        description: "Resume download started",
-      })
+        title: "Error",
+        description: "Failed to download resume",
+        variant: "destructive",
+      });
     } catch (error) {
       console.error("Error downloading resume:", error)
       toast({
