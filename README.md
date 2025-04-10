@@ -1,90 +1,297 @@
-# ATS Application Tracking System
+# ATS (Application Tracking System)
 
-This is a modern full-stack application for tracking job applications and managing candidates.
+A modern, AI-powered Application Tracking System built with Next.js 14, featuring resume parsing, keyword matching, and candidate management.
 
-## Technology Stack
+![ATS Dashboard](https://your-screenshot-url.com)
 
-- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS, Shadcn/UI
-- **Authentication**: Firebase Authentication
-- **Database**: MongoDB with Mongoose
-- **Storage**: AWS S3
-- **AI Integration**: Google Gemini API for Resume Analysis
-- **Backend**: Express.js API with TypeScript
+## 🌟 Live Demo
 
-## Getting Started
+- Frontend: [https://application-tracking-system-production-b126.up.railway.app/](https://application-tracking-system-production-b126.up.railway.app/)
+- Backend API: [ats-backend-production-2143.up.railway.app](ats-backend-production-2143.up.railway.app)
 
-### Prerequisites
+## 📋 Detailed Features
 
-- Node.js 18+ and npm
-- MongoDB (local instance or MongoDB Atlas)
-- Firebase project (for authentication)
-- AWS S3 bucket (for file storage)
-- Google Gemini API key (for resume analysis)
+### 1. Resume Processing & Analysis
+- **Smart Upload System**
+  - Drag-and-drop interface
+  - Multi-file upload support
+  - Progress tracking
+  - File type validation (PDF, DOCX, DOC)
+  - Duplicate detection using SHA-256 hashing
+  - Automatic file organization
 
-### Installation
+- **AI-Powered Analysis**
+  - Experience extraction
+  - Skills identification
+  - Education history parsing
+  - Key achievements recognition
+  - Career progression analysis
+  - Technology stack identification
 
-1. Clone the repository
-   ```bash
-   git clone https://github.com/yourusername/Application-Tracking-System.git
-   cd Application-Tracking-System
-   ```
+- **Keyword Matching**
+  - Job description matching
+  - Skills gap analysis
+  - Experience level matching
+  - Industry relevance scoring
+  - Custom keyword sets
 
-2. Install dependencies
-   ```bash
-   npm install
-   ```
+### 2. Candidate Management
+- **Profile Management**
+  - Detailed candidate profiles
+  - Resume version history
+  - Contact information
+  - Skills matrix
+  - Experience timeline
+  - Education history
 
-3. Set up environment variables
-   - Create a `.env.local` file based on `.env.local.example` for frontend configuration
-   - Update the existing `.env` file with your MongoDB, Firebase Admin, and other backend configurations
+- **Assessment System**
+  - Automated scoring
+  - Custom evaluation criteria
+  - Interview feedback tracking
+  - Performance metrics
+  - Comparative analysis
 
-4. Start the development server
-   ```bash
-   # Run both frontend and backend
-   npm run dev
-   
-   # Run only frontend
-   npm run dev:frontend
-   
-   # Run only backend
-   npm run dev:server
-   ```
+### 3. Vendor Management
+- **Vendor Profiles**
+  - Vendor registration
+  - Performance tracking
+  - Document management
+  - Communication history
+  - Rating system
 
-## Firebase Configuration
+- **Integration Features**
+  - API access management
+  - Custom data mapping
+  - Automated notifications
+  - Report generation
 
-The application uses Firebase for authentication only. All data storage now uses MongoDB.
+### 4. Administrative Features
+- **User Management**
+  - Role-based access control
+  - User activity logging
+  - Permission management
+  - Team collaboration tools
 
-1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/)
-2. Set up Authentication with Email/Password provider
-3. Generate a Firebase Admin SDK private key for the backend
+- **System Configuration**
+  - Custom fields setup
+  - Workflow configuration
+  - Email template management
+  - Integration settings
 
-## MongoDB Setup
+## 🏗 Tech Stack
 
-1. Create a MongoDB database (local or MongoDB Atlas)
-2. Update the `MONGODB_URI` in your `.env` file
+### Frontend
+- Next.js 14 (App Router)
+- React with TypeScript
+- Tailwind CSS for styling
+- Shadcn/UI components
+- Framer Motion for animations
+- Firebase Authentication
 
-## AWS S3 Configuration
+### Backend
+- Express.js with TypeScript
+- MongoDB with Mongoose
+- AWS S3 for file storage
+- Google Gemini AI for resume analysis
 
-1. Create an AWS S3 bucket for file storage
-2. Configure CORS settings for your S3 bucket
-3. Update the AWS configuration in your environment variables
+### Infrastructure
+- Vercel (Frontend hosting)
+- Render (Backend hosting)
+- MongoDB Atlas (Database)
+- AWS S3 (File storage)
 
-## Deployment
+## 📁 Detailed Project Structure
 
-### Deploying the Frontend
-- Deploy the Next.js frontend on Vercel, Netlify, or your preferred hosting platform
+```plaintext
+├── app/
+│   ├── (auth)/                    # Authentication routes
+│   │   ├── login/
+│   │   ├── register/
+│   │   └── forgot-password/
+│   ├── (dashboard)/               # Dashboard routes
+│   │   ├── profiles/
+│   │   ├── upload-resume/
+│   │   └── keyword-matcher/
+│   ├── (admin)/                   # Admin routes
+│   │   ├── users/
+│   │   ├── settings/
+│   │   └── analytics/
+│   └── api/                       # API routes
+├── components/
+│   ├── ui/                        # Base UI components
+│   │   ├── button/
+│   │   ├── dialog/
+│   │   ├── dropdown/
+│   │   └── forms/
+│   ├── dashboard/                 # Dashboard components
+│   │   ├── sidebar/
+│   │   ├── header/
+│   │   └── navigation/
+│   ├── resume/                    # Resume related components
+│   │   ├── upload/
+│   │   ├── preview/
+│   │   └── analysis/
+│   ├── profiles/                  # Profile components
+│   │   ├── card/
+│   │   ├── details/
+│   │   └── editor/
+│   └── shared/                    # Shared components
+├── lib/
+│   ├── api/                       # API client
+│   ├── auth/                      # Authentication utilities
+│   ├── database/                  # Database utilities
+│   └── validators/                # Form validators
+├── hooks/
+│   ├── use-auth.ts
+│   ├── use-profiles.ts
+│   ├── use-upload.ts
+│   └── use-vendors.ts
+├── context/
+│   ├── auth-context.tsx
+│   ├── theme-context.tsx
+│   └── upload-context.tsx
+├── utils/
+│   ├── api-helpers.ts
+│   ├── date-helpers.ts
+│   ├── file-helpers.ts
+│   └── validation-helpers.ts
+├── styles/
+│   ├── globals.css
+│   └── themes/
+├── types/
+│   ├── auth.ts
+│   ├── profile.ts
+│   ├── resume.ts
+│   └── vendor.ts
+├── public/
+│   ├── images/
+│   ├── icons/
+│   └── fonts/
+└── config/
+    ├── constants.ts
+    ├── api-config.ts
+    └── site-config.ts
+```
 
-### Deploying the Backend
-- Deploy the Express.js backend on Heroku, Render, or your preferred hosting platform
+## 🔧 Core Technologies & Integration
 
-## Features
+### Frontend Architecture
+- **Next.js 14 with App Router**
+  - Server components
+  - Client components
+  - API routes
+  - Middleware
+  - Dynamic routing
 
-- User authentication with role-based access (admin/user)
-- Resume upload and analysis using AI
-- Candidate tracking with custom stages
-- Job posting management
-- Vendor management
-- Matching system between candidates and job requirements
-- Mobile-responsive design with dark/light mode
+- **State Management**
+  - React Context
+  - Custom hooks
+  - Local storage
+  - Session management
 
-# ATS-Resume-Checker
+- **UI/UX**
+  - Tailwind CSS
+  - Shadcn/UI components
+  - Framer Motion animations
+  - Responsive design
+  - Dark/Light themes
+
+### Backend Services
+- **Express.js API**
+  - RESTful endpoints
+  - Authentication middleware
+  - File processing
+  - Error handling
+  - Rate limiting
+
+- **Database**
+  - MongoDB schemas
+  - Indexes
+  - Aggregation pipelines
+  - Caching
+  - Backup systems
+
+### Cloud Services
+- **AWS Integration**
+  - S3 for file storage
+  - CloudFront for CDN
+  - IAM for security
+  - Lambda functions
+
+- **Firebase Services**
+  - Authentication
+  - Real-time updates
+  - Cloud messaging
+  - Analytics
+
+### AI & Machine Learning
+- **Google Gemini AI**
+  - Resume parsing
+  - Text analysis
+  - Pattern recognition
+  - Recommendation engine
+
+## 🚀 Development & Deployment
+
+### Development Environment
+```bash
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Run tests
+npm run test
+
+# Build production
+npm run build
+```
+
+### Environment Variables
+```env
+# Frontend
+NEXT_PUBLIC_API_URL=
+NEXT_PUBLIC_FIREBASE_CONFIG=
+NEXT_PUBLIC_GEMINI_API_KEY=
+
+# Backend
+MONGODB_URI=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+JWT_SECRET=
+```
+
+### Deployment Checklist
+- [ ] Environment variables configured
+- [ ] Build optimization
+- [ ] Security headers
+- [ ] SSL certificates
+- [ ] Database backup
+- [ ] Monitoring setup
+
+## 📈 Performance & Security
+
+### Performance Optimization
+- Image optimization
+- Code splitting
+- Lazy loading
+- Caching strategies
+- CDN integration
+
+### Security Measures
+- JWT authentication
+- CORS policies
+- Rate limiting
+- Input validation
+- File scanning
+- XSS protection
+
+## 🤝 Contributing
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
