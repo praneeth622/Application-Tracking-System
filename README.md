@@ -2,12 +2,11 @@
 
 A modern, AI-powered Application Tracking System built with Next.js 14, featuring resume parsing, keyword matching, and candidate management.
 
-![ATS Dashboard](https://your-screenshot-url.com)
 
 ## 🌟 Live Demo
 
 - Frontend: [https://application-tracking-system-production-b126.up.railway.app/](https://application-tracking-system-production-b126.up.railway.app/)
-- Backend API: [ats-backend-production-2143.up.railway.app](ats-backend-production-2143.up.railway.app)
+- Backend API: [https://ats-backend-production-2143.up.railway.app/](https://ats-backend-production-2143.up.railway.app/)
 
 ## 📋 Detailed Features
 
