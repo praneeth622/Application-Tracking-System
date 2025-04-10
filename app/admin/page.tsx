@@ -31,6 +31,17 @@ interface User {
   uid: string; // Changed from optional to required to match UserData interface
 }
 
+// Adding an interface for API response users
+interface ApiUser {
+  id?: string;
+  _id?: string;
+  uid?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  [key: string]: any; // Allow for additional properties from API
+}
+
 export default function AdminPage() {
   const { userProfile, refreshUserProfile } = useAuth();
   const { toast } = useToast();
@@ -54,7 +65,7 @@ export default function AdminPage() {
     
     try {
       // Fetch users first
-      let usersData = [];
+      let usersData: ApiUser[] = []; // Initialize with proper type
       try {
         const response = await apiClient.auth.getAllUsers();
         usersData = Array.isArray(response) ? response : [];
@@ -149,7 +160,7 @@ export default function AdminPage() {
     try {
       const response = await apiClient.auth.getAllUsers();
       // Ensure response is an array and each user has required properties
-      const formattedUsers = Array.isArray(response) ? response.map(user => ({
+      const formattedUsers: User[] = Array.isArray(response) ? response.map((user: ApiUser) => ({
         id: user.id || user._id || user.uid || '',
         uid: user.uid || user.id || user._id || '',
         name: user.name || '',
