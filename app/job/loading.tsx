@@ -6,7 +6,7 @@ import { JobCardSkeleton } from "@/components/job/job-card-skeleton"
 export default function JobLoading() {
   return (
     <div className="min-h-screen bg-background flex">
-      <DashboardSidebar isOpen={false} setIsOpen={() => {}} />
+      <DashboardSidebar isOpen={false} onOpenChange={() => {}} />
 
       <div className="flex-1 min-h-screen ml-[4.5rem]">
         <div className="container mx-auto py-8 px-4 md:px-8">

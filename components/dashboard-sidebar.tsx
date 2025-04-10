@@ -28,7 +28,7 @@ import { toast } from "@/components/ui/use-toast"
 
 interface DashboardSidebarProps {
   isOpen: boolean
-  setIsOpen: (isOpen: boolean) => void
+  onOpenChange: (open: boolean) => void;
 }
 
 interface UserProfile {
@@ -38,7 +38,7 @@ interface UserProfile {
   profileComplete?: boolean
 }
 
-export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
+export function DashboardSidebar({ isOpen, onOpenChange }: DashboardSidebarProps) {
   const { user } = useAuth()
   const isMobile = useMobile()
   const pathname = usePathname()
@@ -163,7 +163,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40"
-          onClick={() => setIsOpen(false)}
+          onClick={() => onOpenChange(false)}
         />
       )}
 
@@ -189,7 +189,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
             {/* Toggle button inside sidebar header - only for expanded mode */}
             {!isMobile && isOpen && (
               <motion.button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => onOpenChange(!isOpen)}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 className="p-1.5 rounded-md hover:bg-primary/10 transition-colors flex-shrink-0"
@@ -201,7 +201,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
 
             {isMobile && (
               <motion.button
-                onClick={() => setIsOpen(false)}
+                onClick={() => onOpenChange(false)}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 className="p-1.5 rounded-md hover:bg-primary/10 transition-colors"
@@ -233,7 +233,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
                     }`}
                     onClick={() => {
                       setActiveItem(item.id)
-                      if (isMobile) setIsOpen(false)
+                      if (isMobile) onOpenChange(false)
                     }}
                   >
                     <span className={`${isOpen || isMobile ? "mr-3" : ""} flex-shrink-0`}>{item.icon}</span>
@@ -283,7 +283,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
                         }`}
                         onClick={() => {
                           setActiveItem(item.id)
-                          if (isMobile) setIsOpen(false)
+                          if (isMobile) onOpenChange(false)
                         }}
                       >
                         <span className={`${isOpen || isMobile ? "mr-3" : ""} flex-shrink-0`}>{item.icon}</span>
@@ -333,7 +333,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
                     }`}
                     onClick={() => {
                       setActiveItem(item.id)
-                      if (isMobile) setIsOpen(false)
+                      if (isMobile) onOpenChange(false)
                     }}
                   >
                     <span className={`${isOpen || isMobile ? "mr-3" : ""} flex-shrink-0`}>{item.icon}</span>
@@ -379,7 +379,7 @@ export function DashboardSidebar({ isOpen, setIsOpen }: DashboardSidebarProps) {
           {!isMobile && !isOpen && (
             <div className="p-2 border-t border-primary/10 flex justify-center">
               <motion.button
-                onClick={() => setIsOpen(true)}
+                onClick={() => onOpenChange(true)}
                 className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors w-full flex justify-center"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}

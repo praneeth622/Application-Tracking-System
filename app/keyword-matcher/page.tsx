@@ -372,7 +372,7 @@ export default function KeywordMatcherPage() {
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
       {/* Add Dashboard Sidebar */}
-      <DashboardSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+      <DashboardSidebar isOpen={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
 
       {/* Main content area */}
       <motion.div

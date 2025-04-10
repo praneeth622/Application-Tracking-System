@@ -74,7 +74,7 @@ export const analyzeBatchMatches = async (jobData: any, resumes: any[]) => {
   try {
     // Process resumes in batches to avoid rate limiting
     const batchSize = 5; // Adjust based on your API limits
-    const results = [];
+    const results: any[] = [];
     
     for (let i = 0; i < resumes.length; i += batchSize) {
       const batch = resumes.slice(i, i + batchSize);

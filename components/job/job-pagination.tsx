@@ -13,7 +13,7 @@ interface JobPaginationProps {
 export function JobPagination({ currentPage, totalPages, onPageChange, isMobile }: JobPaginationProps) {
   if (totalPages <= 1) return null
 
-  const pageNumbers = []
+  const pageNumbers: number[] = []
   const maxVisiblePages = isMobile ? 3 : 5
 
   let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2))

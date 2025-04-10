@@ -18,7 +18,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
 
   // Generate page numbers to display
   const getPageNumbers = () => {
-    const pages = []
+    const pages: (number | string)[] = []
     const maxPagesToShow = 5
 
     if (totalPages <= maxPagesToShow) {

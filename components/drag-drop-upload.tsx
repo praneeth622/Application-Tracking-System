@@ -203,8 +203,8 @@ export function DragDropUpload() {
         }
 
         // Get vendor info if selected
-        let vendorId = null
-        let vendorName = null
+        let vendorId: string | null = null
+        let vendorName: string | null = null
         
         if (selectedVendor && selectedVendor !== "no-vendor") {
           const vendor = vendors.find((v) => v._id === selectedVendor)

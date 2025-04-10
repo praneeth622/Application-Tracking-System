@@ -230,7 +230,7 @@ export default function CreateJobPage() {
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
-      <DashboardSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+      <DashboardSidebar isOpen={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
 
       <motion.div
         className="flex-1 min-h-screen relative"

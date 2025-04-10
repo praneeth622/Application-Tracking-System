@@ -192,6 +192,16 @@ interface JobDetails {
   };
 }
 
+// Add an interface for analysis results
+interface AnalysisResult {
+  filename: string;
+  matchPercentage: number;
+  matchingSkills: string[];
+  missingRequirements: string[];
+  experienceMatch: boolean;
+  educationMatch: boolean;
+  overallAssessment: string;
+}
 
 export default function CandidatesPage() {
   const params = useParams()
@@ -262,7 +272,7 @@ export default function CandidatesPage() {
       const existingCandidateFilenames = candidates.map(c => c.filename);
       console.log(`Found ${existingCandidateFilenames.length} existing candidates for job`);
       
-      let allResumes = [];
+      let allResumes: TransformedResume[] = []; // Initialize with proper type
       
       try {
         allResumes = await apiClient.resumes.getAllForMatching() as TransformedResume[];
@@ -360,7 +370,7 @@ export default function CandidatesPage() {
       console.log(`Analyzing ${resumesData.length} resumes for matching candidates...`);
       toast.info(`Analyzing ${resumesData.length} resumes for matching candidates...`);
       
-      const analysisResults = await analyzeBatchMatches(jobData, resumesData);
+      const analysisResults = await analyzeBatchMatches(jobData, resumesData) as AnalysisResult[];
 
       if (!analysisResults || analysisResults.length === 0) {
         toast.error("No matching candidates found");
@@ -749,7 +759,7 @@ export default function CandidatesPage() {
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
-      <DashboardSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+      <DashboardSidebar isOpen={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
 
       <motion.div
         className="flex-1 min-h-screen"

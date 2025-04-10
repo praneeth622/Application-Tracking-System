@@ -253,7 +253,7 @@ export default function EditJobPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex">
-        <DashboardSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+        <DashboardSidebar isOpen={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
         <div className="flex-1 p-8 flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
         </div>
@@ -263,7 +263,7 @@ export default function EditJobPage() {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <DashboardSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+      <DashboardSidebar isOpen={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
 
       <div
         className="flex-1 py-8 px-4 md:px-8 overflow-y-auto"

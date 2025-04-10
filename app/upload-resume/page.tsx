@@ -178,7 +178,7 @@ export default function UploadResumePage() {
         )}
 
         {/* Sidebar */}
-        <DashboardSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+        <DashboardSidebar isOpen={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
 
         {/* Main Content */}
         <motion.div
