@@ -1,6 +1,6 @@
 import { getAuth } from "firebase/auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ats-backend-production-ca20.up.railway.app/api';
 
 // Add request tracking to prevent duplicate simultaneous requests
 const pendingRequests = new Map();

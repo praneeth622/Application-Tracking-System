@@ -117,7 +117,7 @@ export default function EditJobPage() {
         setIsLoading(true)
 
         // Add proper type assertion and checking
-        const response = await fetch(`http://localhost:5001/api/jobs/${jobId}`);
+        const response = await fetch(`https://ats-backend-production-ca20.up.railway.app/api/jobs/${jobId}`);
         const jobData = await response.json() as { job?: JobData };
 
         // Add nullish coalescing to avoid property access errors
